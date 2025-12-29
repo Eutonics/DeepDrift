@@ -11,7 +11,7 @@ It allows you to distinguish between:
 *   🧠 **Geometric Collapse** (Drift accumulation in deep layers)
 *   👻 **Spurious Correlations** (Anomalies in mid-level features)
 
-![Dashboard](stress_test_dashboard.png)
+![Dashboard](dashboard.png)
 
 ## 🚀 Key Features
 
@@ -26,7 +26,8 @@ It allows you to distinguish between:
 git clone https://github.com/Eutonics/DeepDrift.git
 cd DeepDrift
 pip install .
-## ⚡ Quick Start
+##⚡ Quick Start
+
 ```
 import torchvision.models as models
 from deepdrift import DeepDriftMonitor, diagnose_drift
@@ -42,10 +43,10 @@ monitor = DeepDriftMonitor(model, arch_name='ResNet-18')
 # drift_profile = monitor.scan(batch)
 # status = diagnose_drift(drift_profile)
 # print(status)
-## 📄 Citation
+📄 Citation
 If you use DeepDrift, please cite our paper:
-
-```
+code
+Bibtex
 @article{evtushenko2025deepdrift,
   title={DeepDrift: A Layer-Wise Diagnostic Framework for Neural Network Robustness},
   author={Evtushenko, Alexey},
