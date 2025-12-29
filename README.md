@@ -11,7 +11,7 @@ It allows you to distinguish between:
 *   🧠 **Geometric Collapse** (Drift accumulation in deep layers)
 *   👻 **Spurious Correlations** (Anomalies in mid-level features)
 
-![Dashboard](dashboard.png)
+![Dashboard](stress_test_dashboard.png)
 
 ## 🚀 Key Features
 
