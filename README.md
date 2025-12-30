@@ -1,109 +1,117 @@
 # DeepDrift
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18086612.svg)](https://doi.org/10.5281/zenodo.18086612)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyTorch](https://img.shields.io/badge/PyTorch-1.10%2B-ee4c2c)](https://pytorch.org/)
 
 **A Layer-Wise Diagnostic Framework for Neural Network Robustness.**
 
+> "Stop guessing *why* your model failed. See exactly *where* it broke."
 
-> "Stop guessing why your model failed. See exactly where it broke."
+DeepDrift is an unsupervised diagnostic tool that acts like an **MRI scan for your neural network**. Instead of just monitoring output accuracy (which is a lagging indicator), DeepDrift analyzes how data representations evolve layer-by-layer in real-time.
 
-DeepDrift is an unsupervised diagnostic tool that analyzes how data representations evolve layer-by-layer. Instead of monitoring only output accuracy, it provides structural insights into model failures.
+It allows you to distinguish between:
+*   **Sensor Failure** (High drift at input layers)
+*   **Geometric Collapse** (Drift accumulation in deep layers)
+*   **Spurious Correlations** (Anomalies in mid-level features)
 
 ![Dashboard](stress_test_dashboard.png)
 
-## Key Features
+## 🚀 Key Features
 
-- **Architecture-agnostic**: Works with CNNs, Vision Transformers, and hybrid models.
-- **Unsupervised**: No labeled OOD data required for deployment.
-- **Lightweight**: <1% inference overhead, implemented via forward hooks.
-- **Interpretable signatures**: Identifies failure modes by analyzing drift patterns across network depth.
-- **Real-time capable**: Suitable for production monitoring and safety-critical systems.
+*   **Unsupervised:** No labeled OOD data required. Works in production.
+*   **Predictive Alerting:** Detects trends ($\beta$) and issues warnings *before* thresholds are breached.
+*   **Stable Monitoring:** Uses hysteresis to prevent alert fatigue (flapping).
+*   **AI Doctor:** Built-in heuristics to classify failure modes (Avalanche, Global Collapse, etc.).
+*   **Lightweight:** < 1% inference overhead via forward hooks.
 
-## Installation
+## 📦 Installation
 
 ```bash
-git clone https://github.com/Eutonics/DeepDrift.git  
+git clone https://github.com/Eutonics/DeepDrift.git
 cd DeepDrift
 pip install .
 ```
 
-## Quick Start
+⚡ Quick Start
+1. Real-time Monitoring (Production Mode)
+Use the stateful monitor to track model health with hysteresis and trend detection.
+codePython
 
-```python
+```
 import torch
 import torchvision.models as models
-from deepdrift import DeepDriftMonitor
+from deepdrift import DeepDriftMonitor, ObserverConfig
 
-# Load your model
+# 1. Load your model
 model = models.resnet18(pretrained=True)
 model.eval()
 
-# Initialize monitor
-monitor = DeepDriftMonitor(model, arch_name='ResNet-18')
+# 2. Configure Sensitivity
+# theta_slope: Detects rapid drift acceleration
+# theta_high: Critical alert threshold (Sigma)
+config = ObserverConfig(theta_high=3.0, theta_slope=0.05, window_size=20)
+monitor = DeepDriftMonitor(model, arch_name='ResNet-18', drift_config=config)
 
-# Calibrate on clean data (train_loader)
-# monitor.calibrate(train_loader)
+# 3. Calibrate on clean data (establish baseline)
+# monitor.calibrate(train_loader, max_batches=50)
 
-# Measure drift on new data (ood_batch is a tensor [B, C, H, W])
-# drift_profile = monitor.scan(ood_batch)  # Returns [UV, Mid, Deep, IR] drift scores
+# 4. Monitoring Loop
+# status, alerts = monitor.step(incoming_batch)
 
-# Visualize results
-from deepdrift.visualization import plot_drift_profile
-plot_drift_profile(drift_profile, title="Drift Analysis")
+# if alerts:
+#     for alert in alerts:
+#         print(alert)
+#         # Output: "⚠️ WARNING [Mid]: Rapid Drift Detected (Slope 0.045)"
+#         # Output: "🔴 ALERT [IR]: Threshold Breach (3.2 >= 3.0)"
 ```
 
-## Technical Overview
+2. Static Diagnosis (Research Mode)
+Analyze a single batch to get a spectral signature and diagnosis.
+codePython
 
-DeepDrift treats network depth as a scale dimension ($z$), where $z=0$ corresponds to shallow layers (UV scale) and $z=1$ to deep layers (IR scale). For each layer, it calculates:
+```
+from deepdrift import diagnose_drift, plot_drift_profile
 
-1. A baseline mean representation ($\mu$) and standard deviation ($\sigma$) from calibration data.
-2. Drift score: $D(z) = ||\mu_{test} - \mu|| / \sigma$
+# ... (after calibration) ...
 
-This approach reveals characteristic failure patterns:
-- **Mid-Layer Bulge**: Spurious correlations (e.g., color shortcuts in Colored MNIST).
-- **Avalanche Effect**: Error accumulation in CNNs under geometric stress.
-- **Global Collapse**: Immediate instability in ViTs due to positional encoding mismatch.
-- **Shadow Signature**: Persistent drift through deep layers for adversarial examples.
+# Get raw profile
+drift_profile = monitor.step(ood_batch)[0] # Extract drift values
 
-## Usage Examples
-
-### Architecture Comparison
-
-```python
-# Compare different architectures under rotation stress
-# for arch in ['ResNet-18', 'ViT-B/16', 'ConvNeXt-T']:
-#     model = load_model(arch)
-#     monitor = DeepDriftMonitor(model, arch)
-#     monitor.calibrate(clean_loader)
-#     drift_profile = monitor.scan(rotation_loader(angle=30))
-    # Analyze results to select most robust architecture
+# Get Diagnosis
+diagnosis = diagnose_drift([d['drift'] for d in drift_profile.values()])
+print(f"Diagnosis: {diagnosis}")
+# Output: "WARNING: Avalanche Effect (Geometric Failure)"
 ```
 
-### Adversarial Detection
+📚 Research & Publications
+DeepDrift is backed by research on Renormalization Group theory in Deep Learning.
 
-```python
-# Distinguish adversarial examples from benign noise
-# monitor.calibrate(clean_loader)
-# adv_drift = monitor.scan(adversarial_loader)   # Shows persistent drift
-# noise_drift = monitor.scan(noise_loader)       # Shows attenuation with depth
-```
+1. DeepDrift: A Layer-Wise Diagnostic Framework for Neural Network Robustness (2025)
 
-## Citation
+   * The foundational paper describing the framework and metrics.
 
+2. Spatial Dynamics of Memorization in Diffusion Models (2025)
+
+   * Application of DeepDrift to discover the "Burning Bottleneck" phenomenon in U-Nets.
+
+📄 Citation
 If you use DeepDrift in your research, please cite:
+codeBibtex
 
-```bibtex
+```
 @article{evtushenko2025deepdrift,
   title={DeepDrift: A Layer-Wise Diagnostic Framework for Neural Network Robustness},
-  author={Alexey Evtushenko},
+  author={Evtushenko, Alexey},
+  journal={arXiv preprint},
+  doi={10.5281/zenodo.18086612},
   year={2025}
 }
 ```
 
-## License
-
+License
 This project is licensed under the MIT License.
+codeCode
 
----
-
-*DeepDrift: Making neural networks transparent, one layer at a time.*
+```
+```
