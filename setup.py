@@ -2,10 +2,10 @@ from setuptools import setup, find_packages
 
 setup(
     name="deepdrift",
-    version="0.1.0",
+    version="0.2.0",
     description="A Layer-Wise Diagnostic Framework for Neural Network Robustness",
     author="Alexey Evtushenko",
-    author_email="alexey@deepdrift.ai",
+    author_email="alexey@eutonics.ru",
     packages=find_packages(),
     install_requires=[
         "torch>=1.10.0",
