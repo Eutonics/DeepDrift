@@ -20,10 +20,19 @@ It allows you to distinguish between:
 ## 🚀 Key Features
 
 *   **Unsupervised:** No labeled OOD data required. Works in production.
-*   **Predictive Alerting:** Detects trends ($\beta$) and issues warnings *before* thresholds are breached.
-*   **Stable Monitoring:** Uses hysteresis to prevent alert fatigue (flapping).
-*   **AI Doctor:** Built-in heuristics to classify failure modes (Avalanche, Global Collapse, etc.).
-*   **Lightweight:** < 1% inference overhead via forward hooks.
+*   **Lightweight:** < 1% inference overhead.
+*   **Interpretability:** Maps drift to network depth ($z$-axis).
+*   **AI Doctor:** Built-in heuristics to classify failure modes.
+
+## 🧠 Under the Hood: Predictive Monitoring
+
+DeepDrift isn't just a threshold check. It implements a stateful **Finite State Machine (FSM)** with hysteresis and trend analysis to prevent alert fatigue.
+
+![Observer Logic](observer_logic.png)
+
+*   **⚠️ Early Warning (Yellow):** Detects rapid drift acceleration ($\beta$-slope) *before* the critical threshold is breached.
+*   **🔴 Critical Alert (Red):** Triggers when structural integrity is compromised.
+*   **🟢 Hysteresis Recovery:** The alert stays active until the system stabilizes significantly below the threshold, preventing flickering alarms.
 
 ## 📦 Installation
 
