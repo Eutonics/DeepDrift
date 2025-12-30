@@ -1,50 +1,50 @@
 import torch
 import numpy as np
-from tqdm.auto import tqdm
+from .observer import LayerObserver, ObserverConfig, MonitorState
 
 class DeepDriftMonitor:
     """
-    Monitors layer-wise representation drift to detect OOD shifts and architectural failures.
+    Monitors layer-wise representation drift with stateful alerting system.
     """
-    def __init__(self, model, arch_name=None, layers_map=None):
-        """
-        Args:
-            model: PyTorch model (nn.Module).
-            arch_name: String ('ResNet-18', 'ViT-B/16', etc.) for auto-mapping.
-            layers_map: Dictionary {'LayerName': module} mapping UV -> IR depth.
-        """
+    def __init__(self, model, arch_name=None, layers_map=None, drift_config=None):
         self.model = model
         self.activations = {}
         self.hooks = []
         self.mu = {}
         self.sigma = {}
-        # Определяем устройство по первому параметру модели
+        self.step_counter = 0
+        
         try:
             self.device = next(model.parameters()).device
         except StopIteration:
             self.device = 'cpu'
         
+        # 1. Setup Layers
         if layers_map is not None:
             self.layers = layers_map
         elif arch_name is not None:
             self.layers = self._auto_detect_layers(model, arch_name)
         else:
-            # Fallback: try to grab top-level children if nothing specified
-            print("DeepDrift Warning: No architecture specified. Using top-level modules.")
             self.layers = {name: module for name, module in model.named_children()}
+
+        # 2. Setup Observers
+        cfg = drift_config if drift_config else ObserverConfig()
+        self.observers = {
+            name: LayerObserver(name, cfg) for name in self.layers
+        }
 
         self._register_hooks()
 
     def _auto_detect_layers(self, model, arch_name):
         layers = {}
-        if 'ResNet' in arch_name or 'resnet' in arch_name.lower():
+        name_lower = arch_name.lower()
+        if 'resnet' in name_lower:
             layers = {
                 'UV': getattr(model, 'layer1', None) or getattr(model, 'features', None)[0],
                 'Mid': getattr(model, 'layer2', None) or getattr(model, 'features', None)[4],
                 'Deep': getattr(model, 'layer3', None) or getattr(model, 'features', None)[6],
                 'IR': getattr(model, 'layer4', None) or getattr(model, 'features', None)[-1]
             }
-        # Упрощенная логика для старта. Пользователь может передать свой map.
         return {k: v for k, v in layers.items() if v is not None}
 
     def _hook_fn(self, name):
@@ -66,11 +66,9 @@ class DeepDriftMonitor:
         print("⚙️ DeepDrift: Calibrating baseline...")
         self.model.eval()
         acc = {k: [] for k in self.layers}
-        
         with torch.no_grad():
             for i, batch in enumerate(loader):
                 if i >= max_batches: break
-                # Handle tuple (x, y) or just x
                 x = batch[0] if isinstance(batch, (list, tuple)) else batch
                 x = x.to(self.device)
                 _ = self.model(x)
@@ -84,20 +82,35 @@ class DeepDriftMonitor:
                 self.sigma[k] = dist.std().item() + 1e-9
         print("✅ Calibration complete.")
 
-    def scan(self, inputs):
+    def step(self, inputs):
+        """
+        Process one batch and return system status.
+        """
         self.model.eval()
+        self.step_counter += 1
+        
         with torch.no_grad():
             _ = self.model(inputs)
         
-        profile = []
-        for k in self.layers:
-            if k in self.activations and k in self.mu:
-                batch_mu = self.activations[k].mean(dim=0)
-                dist = torch.norm(batch_mu - self.mu[k]).item()
-                z_score = dist / self.sigma[k]
-                profile.append(z_score)
+        current_status = {}
+        alerts = []
+        
+        for name in self.layers:
+            if name in self.activations and name in self.mu:
+                batch_mu = self.activations[name].mean(dim=0)
+                dist = torch.norm(batch_mu - self.mu[name]).item()
+                z_score = dist / self.sigma[name]
+                
+                state, event = self.observers[name].update(z_score, self.step_counter)
+                
+                current_status[name] = {
+                    'drift': z_score,
+                    'slope': self.observers[name].current_beta,
+                    'state': state.value
+                }
+                if event: alerts.append(event)
             
-        return profile
+        return current_status, alerts
 
     def close(self):
         for h in self.hooks: h.remove()
