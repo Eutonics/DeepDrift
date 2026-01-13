@@ -49,6 +49,10 @@ class DeepDriftMonitor:
 
     def _hook_fn(self, name):
         def hook(model, input, output):
+            # FIX: Handle tuple outputs from Transformers
+            if isinstance(output, tuple):
+                output = output[0]
+            
             if output.dim() == 4: 
                 act = output.mean(dim=[2, 3])
             elif output.dim() == 3: 
