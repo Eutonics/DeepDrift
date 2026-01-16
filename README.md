@@ -106,13 +106,11 @@ DeepDrift is backed by research on Renormalization Group theory in Deep Learning
 
 📄 Citation
 If you use DeepDrift in your research, please cite:
-codeBibtex
 
 ```
 @article{evtushenko2025deepdrift,
   title={DeepDrift: A Layer-Wise Diagnostic Framework for Neural Network Robustness},
   author={Evtushenko, Alexey},
-  journal={arXiv preprint},
   doi={10.5281/zenodo.18086612},
   year={2025}
 }
@@ -120,7 +118,3 @@ codeBibtex
 
 License
 This project is licensed under the MIT License.
-codeCode
-
-```
-```
