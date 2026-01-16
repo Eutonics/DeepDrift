@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="deepdrift",
-    version="0.3.0",
+    version="0.3.1",
     description="A Layer-Wise Diagnostic Framework for Neural Network Robustness",
     author="Alexey Evtushenko",
     author_email="alexey@eutonics.ru",
