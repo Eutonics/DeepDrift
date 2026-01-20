@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="deepdrift",
-    version="0.3.1",
+    version="0.3.2",
     author="Alexey Evtushenko",
     author_email="alexey@eutonics.ru",
     description="A universal thermodynamic framework for neural network robustness monitoring.",
