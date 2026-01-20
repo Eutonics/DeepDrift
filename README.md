@@ -95,7 +95,7 @@ Interpretable: Outputs human-readable diagnostics: “Global Collapse”, “Mid
 Alexey Evtushenko — Independent Researcher & Engineer
 Built this to bring reliability-first engineering to the world of neural networks.
 
-- GitHub: [@Eutonics](https://github.com/Eutonics)  
+- GitHub: [@Eutonics](https://github.com/Eutonics)
 - X (Twitter): [@axelgravitone](https://x.com/axelgravitone)  
 - Hugging Face: [DeepDrift-Explorer](https://huggingface.co/spaces/Eutonics/DeepDrift-Explorer)
 
