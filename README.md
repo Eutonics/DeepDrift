@@ -99,4 +99,12 @@ Built this to bring reliability-first engineering to the world of neural network
 - X (Twitter): [@axelgravitone](https://x.com/axelgravitone)  
 - Hugging Face: [DeepDrift-Explorer](https://huggingface.co/spaces/Eutonics/DeepDrift-Explorer)
 
+## 🚀 Live Demo
+
+Try the tool yourself on Hugging Face Spaces:  
+[![Open in HF Spaces](https://img.shields.io/badge/HF%20Spaces-DeepDrift-red)](https://huggingface.co/spaces/Eutonics/DeepDrift-Hallucination-Detector)
+
+Watch how Semantic Velocity predicts hallucinations before they happen:
+
+
 “Stop guessing why your model failed. See exactly where it broke.”
