@@ -99,6 +99,21 @@ Built this to bring reliability-first engineering to the world of neural network
 - X (Twitter): [@axelgravitone](https://x.com/axelgravitone)  
 - Hugging Face: [DeepDrift-Explorer](https://huggingface.co/spaces/Eutonics/DeepDrift-Explorer)
 
+## 📊 Benchmarks & Case Studies
+
+### 💰 Financial Fraud Detection (PaySim)
+We evaluated DeepDrift on the PaySim dataset (1.5M transactions) against a **"Shuffle Attack"** scenario (contextual fraud that preserves statistical moments like mean/std but breaks causality).
+
+| Method | Feature Type | ROC-AUC | Result |
+| :--- | :--- | :--- | :--- |
+| Random Forest (Baseline) | Static (Mean/Std) | 0.16 | **Failed** (Blind) |
+| **Random Forest + ODD** | **Static + Kinetic** | **0.40** | **+147% Improvement** |
+
+**Why it works:** The model automatically selected Semantic Velocity as the **#1 most important feature** (Importance ~0.29), proving that kinetic dynamics contain signal invisible to static statistics.
+
+![PaySim Results](figures/paysim_results.png)
+*(See full reproduction in `examples/fintech.ipynb`)*
+
 ## 🚀 Live Demo
 
 Try the tool yourself on Hugging Face Spaces:  
