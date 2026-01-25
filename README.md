@@ -84,6 +84,20 @@ This isn’t just theory — it’s a production-ready diagnostic tool with <1% 
 ## 📄 Read the full work:
 [Confidently Wrong: ODD as a Universal Thermodynamic Framework (Zenodo)](https://doi.org/10.5281/zenodo.18086612)
 
+## ⚡ Production Performance (v0.4.0)
+
+DeepDrift employs **Sparse Channel Sampling** and **Global Average Pooling**, making it suitable for high-load environments.
+
+**Benchmark (ResNet-20 on CPU):**
+
+| Method | Inference Time | Monitor Time | **Overhead** |
+| :--- | :--- | :--- | :--- |
+| Full Monitor | 12.8 ms | 16.2 ms | 126% |
+| **DeepDrift v0.4** | **12.8 ms** | **0.03 ms** | **0.2%** |
+
+*Note: With 50 sampled channels per layer, overhead becomes negligible (<1%) while maintaining >93% anomaly detection accuracy.*
+
+
 ## 🛠️ Features
 Plug & Play: Works out-of-the-box with torch, transformers, stable-baselines3.
 Auto-Detect: Supports ResNet, ViT, ConvNeXt, Llama, Qwen, GPT, and more.
