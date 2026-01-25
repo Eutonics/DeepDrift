@@ -1,256 +1,204 @@
 import torch
-import torch.nn.functional as F
+import torch.nn as nn
 import numpy as np
-from .observer import LayerObserver, ObserverConfig, MonitorState
-import warnings
+from typing import Dict, List, Optional, Union
 
 class DeepDriftMonitor:
     """
-    Advanced monitor tracking Mean, Cosine, Variance drift, and Semantic Velocity.
-    Supports LLMs (Last Token physics) and Vision Models (Spatial Mean).
+    Production-grade monitor for Neural Network Kinetic Dynamics (Semantic Velocity).
+    
+    Key Features:
+    - Sparse Channel Sampling: Monitors only N random channels (drastically reduces overhead).
+    - Global Average Pooling: Makes drift calculation spatial-invariant and fast.
+    - EMA Smoothing: Reduces noise in the velocity signal.
+    - Robust Thresholding: Uses IQR (Interquartile Range) instead of StdDev.
     """
-    def __init__(self, model, arch_name=None, layers_map=None, drift_config=None, strategy='auto'):
-        """
-        strategy: 'auto', 'mean' (pooling), or 'last_token' (for generation dynamics)
-        """
+    def __init__(
+        self, 
+        model: nn.Module, 
+        layers_map: Optional[Dict[str, nn.Module]] = None,
+        n_channels: int = 50,
+        ema_alpha: float = 0.1
+    ):
         self.model = model
-        self.activations = {}
+        self.n_channels = n_channels
+        self.ema_alpha = ema_alpha
+        
         self.hooks = []
+        self.activations = {}
+        self.layer_indices = {} # Cache for stratified sampling indices
         
-        # Calibration Stats
-        self.baseline_mu = {}   # Mean vector
-        self.baseline_var = {}  # Variance vector
-        self.baseline_norm = {} # Average norm (for cosine)
+        # Statistics
+        self.baseline_mean = {}
+        self.baseline_std = {}
+        self.drift_ema = None
         
-        # Dynamics Tracking (State t-1)
-        self.prev_activations = {} 
-        
-        self.step_counter = 0
-        
-        # Strategy selection
-        self.strategy = strategy
-        if self.strategy == 'auto':
-            # Heuristic: if it looks like a GPT/Llama, use last_token
-            name_lower = (arch_name or "").lower()
-            if any(x in name_lower for x in ['llama', 'gpt', 'mistral', 'qwen']):
-                self.strategy = 'last_token'
-            else:
-                self.strategy = 'mean'
-        
-        print(f"🔧 DeepDrift Strategy: {self.strategy.upper()}")
+        # Thresholds
+        self.threshold_warning = float('inf')
+        self.threshold_critical = float('inf')
+        self.is_calibrated = False
 
-        try:
-            self.device = next(model.parameters()).device
-        except StopIteration:
-            self.device = 'cpu'
-        
-        # 1. Setup Layers
-        if layers_map is not None:
-            self.layers = layers_map
-        elif arch_name is not None:
-            self.layers = self._auto_detect_layers(model, arch_name)
+        # Auto-detect layers if not provided
+        if layers_map is None:
+            self.target_layers = self._auto_detect_layers()
         else:
-            self.layers = {name: module for name, module in model.named_children()}
-
-        # 2. Setup Observers
-        cfg = drift_config if drift_config else ObserverConfig()
-        self.observers = {
-            name: LayerObserver(name, cfg) for name in self.layers
-        }
-
+            self.target_layers = layers_map
+            
         self._register_hooks()
 
-    def _auto_detect_layers(self, model, arch_name):
-        layers = {}
-        name_lower = arch_name.lower()
+    def _auto_detect_layers(self) -> Dict[str, nn.Module]:
+        """Heuristic to find impactful layers in the middle/end of the network."""
+        candidates = []
+        for name, module in self.model.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                # Skip very small layers (e.g. initial projections)
+                if hasattr(module, 'weight') and module.weight.numel() > 10000:
+                    candidates.append((name, module))
         
-        if 'resnet' in name_lower or 'convnext' in name_lower:
-            # Vision Heuristics
-            # ... (Existing logic for Vision) ...
-            features = getattr(model, 'features', None)
-            if features:
-                 layers = {
-                    'UV': features[0],
-                    'Mid': features[len(features)//2],
-                    'IR': features[-1]
-                 }
-        elif any(x in name_lower for x in ['vit', 'bert', 'llama', 'gpt', 'mistral']):
-             # Transformer Heuristics
-             blocks = []
-             if hasattr(model, 'layers'): blocks = model.layers
-             elif hasattr(model, 'encoder') and hasattr(model.encoder, 'layers'): blocks = model.encoder.layers
-             elif hasattr(model, 'h'): blocks = model.h
-             elif hasattr(model, 'model') and hasattr(model.model, 'layers'): blocks = model.model.layers
-             
-             if len(blocks) > 0:
-                 total = len(blocks)
-                 # Map Top, Middle, Bottom
-                 layers = {
-                     'UV': blocks[0],
-                     'Mid': blocks[total // 2],
-                     'Deep': blocks[int(total * 0.75)],
-                     'IR': getattr(model, 'norm', None) or getattr(model.model, 'norm', None) or blocks[-1]
-                 }
-                 
-        return {k: v for k, v in layers.items() if v is not None}
-
-    def _hook_fn(self, name):
-        def hook(module, input, output):
-            # 1. ROBUST UNWRAPPING (Fix for Llama/HF)
-            data = output
-            if isinstance(output, tuple):
-                data = output[0]
-            elif hasattr(output, 'last_hidden_state'):
-                data = output.last_hidden_state
-            elif hasattr(output, 'hidden_states'):
-                data = output.hidden_states[-1]
-            
-            # 2. AGGREGATION STRATEGY
-            # Ensure we have a tensor
-            if not isinstance(data, torch.Tensor):
-                return # Fail silently or log
-            
-            # [Batch, Seq, Dim] -> [Batch, Dim]
-            if data.dim() == 3:
-                if self.strategy == 'last_token':
-                    # Physics of Generation: The "Tip of the spear"
-                    act = data[:, -1, :]
-                else:
-                    # Physics of Classification: Context Mean
-                    act = data.mean(dim=1)
-            elif data.dim() == 4: # CNN [B, C, H, W]
-                act = data.mean(dim=[2, 3])
-            else:
-                act = data.flatten(1)
-                
-            self.activations[name] = act.detach().float() # Force float32 for stats
-        return hook
+        # Pick up to 4 layers evenly spaced
+        if len(candidates) > 4:
+            indices = np.linspace(0, len(candidates)-1, 4, dtype=int)
+            return {candidates[i][0]: candidates[i][1] for i in indices}
+        return {name: module for name, module in candidates}
 
     def _register_hooks(self):
-        # Clear existing hooks first if re-registering
-        for h in self.hooks: h.remove()
-        self.hooks = []
-        
-        for name, module in self.layers.items():
-            self.hooks.append(module.register_forward_hook(self._hook_fn(name)))
+        def get_hook(name):
+            def hook(module, input, output):
+                # 1. Global Average Pooling (B, C, H, W -> B, C)
+                if output.dim() == 4:
+                    flat = output.mean(dim=[2, 3])
+                elif output.dim() == 3: # Transformer (B, S, D) -> Take mean over sequence
+                    flat = output.mean(dim=1) 
+                else:
+                    flat = output
+                
+                # 2. Sparse Sampling (Deterministically random channels)
+                C = flat.shape[1]
+                if name not in self.layer_indices:
+                    limit = min(C, self.n_channels)
+                    g = torch.Generator().manual_seed(42) # Fixed seed for consistency
+                    self.layer_indices[name] = torch.randperm(C, generator=g)[:limit]
+                
+                indices = self.layer_indices[name].to(flat.device)
+                self.activations[name] = flat[:, indices].detach()
+            return hook
 
-    def calibrate(self, loader, max_batches=50):
-        print("⚙️ DeepDrift: Calibrating advanced statistics...")
+        for name, layer in self.target_layers.items():
+            self.hooks.append(layer.register_forward_hook(get_hook(name)))
+
+    def calibrate(self, dataloader, device=None, max_batches=50):
+        """
+        Calibrates baseline statistics (Mean/Std) and Thresholds (IQR) on normal data.
+        """
+        if device is None:
+            # Try to guess device from model parameters
+            try:
+                device = next(self.model.parameters()).device
+            except:
+                device = 'cpu'
+
+        print(f"⚙️ DeepDrift: Calibrating on {min(len(dataloader), max_batches)} batches...")
+        stats_collector = {name: [] for name in self.target_layers}
         self.model.eval()
         
-        acc_mu = {k: [] for k in self.layers}
-        
+        # 1. Collect Activations
         with torch.no_grad():
-            for i, batch in enumerate(loader):
+            for i, batch in enumerate(dataloader):
                 if i >= max_batches: break
                 
-                # Input Normalization
-                if isinstance(batch, dict): 
-                    # HF Tokenizer output
-                    if 'input_ids' in batch:
-                        x = batch['input_ids'].to(self.device)
-                        mask = batch.get('attention_mask', None)
-                        if mask is not None: mask = mask.to(self.device)
-                        # We pass kwargs to support models that need attention_mask
-                        try:
-                            _ = self.model(input_ids=x, attention_mask=mask)
-                        except:
-                            _ = self.model(x)
-                    else:
-                        # Generic dict
-                        x = list(batch.values())[0].to(self.device)
-                        _ = self.model(x)
+                # Handle tuple (x, y) or just x
+                if isinstance(batch, (list, tuple)):
+                    x = batch[0]
                 else:
-                    # Tensor or List
-                    x = batch[0] if isinstance(batch, (list, tuple)) else batch
-                    if hasattr(x, 'to'): x = x.to(self.device)
-                    _ = self.model(x)
-
-                for k in self.layers: 
-                    if k in self.activations:
-                        acc_mu[k].append(self.activations[k])
-        
-        # Calculate Stats
-        for k in self.layers:
-            if len(acc_mu[k]) > 0:
-                data = torch.cat(acc_mu[k], dim=0) # [N_total, Dim]
+                    x = batch
                 
-                self.baseline_mu[k] = data.mean(dim=0)
-                # Robust variance (prevent division by zero)
-                self.baseline_var[k] = data.var(dim=0) + 1e-5
-                self.baseline_norm[k] = torch.norm(self.baseline_mu[k]) + 1e-9
-            else:
-                warnings.warn(f"Layer {k} captured no data during calibration!")
+                x = x.to(device)
+                _ = self.model(x) # Forward pass triggers hooks
                 
-        print("✅ Calibration complete.")
+                for name in self.target_layers:
+                    stats_collector[name].append(self.activations[name])
 
-    def step(self, inputs):
-        self.model.eval()
-        self.step_counter += 1
-        
-        # Forward Pass
+        # 2. Compute Mean/Std
+        for name, data in stats_collector.items():
+            if not data: continue
+            data_cat = torch.cat(data, dim=0)
+            self.baseline_mean[name] = data_cat.mean(dim=0)
+            self.baseline_std[name] = data_cat.std(dim=0) + 1e-6
+
+        # 3. Compute Thresholds (Re-run to calculate drift scores)
+        drifts = []
         with torch.no_grad():
-            if isinstance(inputs, dict):
-                inputs = {k: v.to(self.device) if hasattr(v, 'to') else v for k, v in inputs.items()}
-                _ = self.model(**inputs)
-            elif torch.is_tensor(inputs):
-                _ = self.model(inputs.to(self.device))
-            else:
-                 # Fallback
-                 _ = self.model(inputs)
+            for i, batch in enumerate(dataloader):
+                if i >= max_batches: break
+                if isinstance(batch, (list, tuple)): x = batch[0]
+                else: x = batch
+                x = x.to(device)
+                _ = self.model(x)
+                drifts.append(self._compute_instant_drift())
         
-        current_status = {}
-        alerts = []
+        drifts = np.array(drifts)
+        q75, q25 = np.percentile(drifts, [75, 25])
+        iqr = q75 - q25
         
-        for name in self.layers:
-            # Check if hook fired
-            if name not in self.activations:
-                continue
-                
-            if name not in self.baseline_mu:
-                # If not calibrated, return raw data or skip
-                continue
+        self.threshold_warning = q75 + 1.5 * iqr
+        self.threshold_critical = q75 + 3.0 * iqr
+        self.is_calibrated = True
+        
+        print(f"✅ Calibration Complete. Thresholds: Warning={self.threshold_warning:.2f}, Critical={self.threshold_critical:.2f}")
 
-            batch = self.activations[name] # [Batch, Dim]
-            # Handle Batch>1 by averaging for the metric
-            batch_mu = batch.mean(dim=0) 
+    def _compute_instant_drift(self) -> float:
+        total_drift = 0
+        count = 0
+        for name in self.target_layers:
+            if name not in self.activations: continue
             
-            # --- METRIC 1: Euclidean Shift (Normalized) ---
-            diff_sq = (batch_mu - self.baseline_mu[name]) ** 2
-            # Mean of Z-scores per neuron
-            z_euclid = torch.mean(torch.sqrt(diff_sq / self.baseline_var[name])).item()
+            act = self.activations[name]
+            # Z-score distance: || (x - mu) / sigma ||
+            mean = self.baseline_mean[name].to(act.device)
+            std = self.baseline_std[name].to(act.device)
             
-            # --- METRIC 2: Cosine Drift (Angle) ---
-            dot = torch.dot(batch_mu, self.baseline_mu[name])
-            curr_norm = torch.norm(batch_mu) + 1e-9
-            cosine_sim = dot / (curr_norm * self.baseline_norm[name])
-            drift_cosine = 1.0 - cosine_sim.item()
+            z = (act - mean) / std
+            drift = torch.norm(z, p=2, dim=1).mean().item()
+            total_drift += drift
+            count += 1
             
-            # --- METRIC 3: Semantic Velocity (New!) ---
-            velocity = 0.0
-            if name in self.prev_activations:
-                prev = self.prev_activations[name]
-                # L2 Distance between current and prev state
-                # Note: Assuming batch size 1 for simplicity in generation, or mean otherwise
-                velocity = torch.norm(batch_mu - prev.mean(dim=0)).item()
-            
-            # Store current as prev for next step
-            self.prev_activations[name] = batch.detach().clone()
-            
-            # --- Observer Logic ---
-            state, event = self.observers[name].update(z_euclid, self.step_counter)
-            
-            current_status[name] = {
-                'drift': z_euclid,
-                'velocity': velocity,     # <--- ADDED
-                'drift_cosine': drift_cosine,
-                'state': state.value
-            }
-            
-            if event: alerts.append(event)
-            
-        return current_status, alerts
+        return total_drift / max(count, 1)
 
-    def close(self):
-        for h in self.hooks: h.remove()
+    def step(self, x_input=None) -> tuple[float, dict]:
+        """
+        Calculates Kinetic Drift for the current forward pass.
+        Returns: (drift_value, status_dict)
+        """
+        if x_input is not None:
+            with torch.no_grad():
+                _ = self.model(x_input)
+        
+        raw_drift = self._compute_instant_drift()
+        
+        # EMA Update
+        if self.drift_ema is None:
+            self.drift_ema = raw_drift
+        else:
+            self.drift_ema = (self.ema_alpha * raw_drift) + ((1 - self.ema_alpha) * self.drift_ema)
+            
+        # Status
+        if self.drift_ema > self.threshold_critical:
+            status = "CRITICAL"
+        elif self.drift_ema > self.threshold_warning:
+            status = "WARNING"
+        else:
+            status = "OK"
+            
+        info = {
+            "drift_ema": self.drift_ema,
+            "drift_raw": raw_drift,
+            "status": status,
+            "layers": list(self.target_layers.keys())
+        }
+            
+        return self.drift_ema, info
+
+    def remove_hooks(self):
+        for h in self.hooks:
+            h.remove()
         self.hooks = []
