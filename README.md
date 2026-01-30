@@ -135,5 +135,37 @@ Try the tool yourself on Hugging Face Spaces:
 
 Watch how Semantic Velocity predicts hallucinations before they happen:
 
+👁 Computer Vision Support
+code
+Python
+import torch
+from torchvision import models
+from deepdrift import DeepDriftVision
+
+# 1. Setup
+model = models.resnet50(pretrained=True)
+monitor = DeepDriftVision(model)
+
+# 2. Fit (One-liner)
+# Assuming train_loader exists
+monitor.fit(train_loader)
+
+# 3. Diagnose
+diagnosis = monitor.predict(image_batch)
+print(diagnosis) 
+# >> VisionDiagnosis(status='CRITICAL', drift_score=2.45, ...)
+🛡 Kinetic Router (For FastAPI/Flask)
+code
+Python
+from deepdrift import KineticRouter
+
+router = KineticRouter(guard)
+
+@app.post("/generate")
+@router.guard  # <--- Protects this endpoint
+def generate_text(prompt):
+    # If hallucination starts, this function terminates early
+    return model.generate(prompt, stopping_criteria=[guard])
+
 
 “Stop guessing why your model failed. See exactly where it broke.”
