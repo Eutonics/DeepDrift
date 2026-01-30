@@ -37,10 +37,11 @@ class DeepDriftVision:
                       if isinstance(m, (nn.Conv2d, nn.Linear))]
         
         # 2. Select layers in the middle (Burning Bottleneck region: 50%-80%)
-        # We pick 3 probe points for spatial depth analysis
         if len(all_layers) > 3:
-            indices = np.linspace(len(all_layers)*0.4, len(all_layers)*0.8, 3, dtype=int)
-            target_layers = [all_layers[i] for i in indices]
+            start = int(len(all_layers) * 0.5)
+            end = int(len(all_layers) * 0.8)
+            step = max(1, (end - start) // 2)
+            target_layers = all_layers[start:end:step][:3]
         else:
             target_layers = all_layers
 
@@ -79,9 +80,7 @@ class DeepDriftVision:
                 if i > 50: break # Calibration limit
                 if isinstance(batch, (tuple, list)): batch = batch[0]
                 
-                # Forward pass trigger hooks
                 self.model(batch.to(device))
-                
                 for name, val in self.activations.items():
                     accumulated[name].append(val.cpu())
         
@@ -92,7 +91,6 @@ class DeepDriftVision:
             self.baseline_sigma[name] = data.std(dim=0) + 1e-6
             
             # Calculate threshold (99th percentile of training drift)
-            # Drift metric: Z-score distance
             z_scores = torch.abs((data - self.baseline_mu[name]) / self.baseline_sigma[name]).mean(dim=1)
             self.thresholds[name] = np.percentile(z_scores.numpy(), 99)
             
@@ -122,9 +120,8 @@ class DeepDriftVision:
             if ratio > max_drift_ratio:
                 max_drift_ratio = ratio
 
-        # Diagnosis Logic
         status = "STABLE"
         if max_drift_ratio > 1.0: status = "WARNING"
-        if max_drift_ratio > 2.0: status = "CRITICAL" # 2x threshold
+        if max_drift_ratio > 2.0: status = "CRITICAL"
         
         return VisionDiagnosis(max_drift_ratio, status, layer_drifts)
