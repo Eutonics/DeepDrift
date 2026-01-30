@@ -17,10 +17,7 @@ class KineticRouter:
             start_time = time.time()
             try:
                 # Run inference
-                # If DeepDriftGuard (LLM) triggers, it stops generation internally.
-                # If user manually raises exception based on VisionDiagnosis, we catch it here.
                 result = func(*args, **kwargs)
-                
                 self.stats["processed"] += 1
                 return result
                 
@@ -29,18 +26,16 @@ class KineticRouter:
                 error_msg = str(e)
                 if "STOP" in error_msg or "Velocity" in error_msg or "CRITICAL" in error_msg:
                     self.stats["rejected"] += 1
-                    print(f"🛡 KineticRouter: Request rejected. Reason: {error_msg}")
-                    # Return safe fallback response
+                    print(f"🛡 KineticRouter: BLOCKED -> {error_msg}")
                     return {
-                        "error": "Model instability detected", 
+                        "error": "Request rejected: Model Instability Detected", 
                         "code": 422,
                         "details": error_msg
                     }
-                raise e # Re-raise other errors (CUDA OOM, etc.)
+                raise e
                 
             finally:
                 duration = time.time() - start_time
-                # Moving average latency
                 self.stats["avg_latency"] = (self.stats["avg_latency"] * 0.9) + (duration * 0.1)
                 
         return wrapper
