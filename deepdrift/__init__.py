@@ -1,14 +1,5 @@
-from .monitor import DeepDriftMonitor
-from .observer import ObserverConfig, MonitorState
-from .doctor import diagnose_drift
-from .visualization import plot_drift_profile
+from .guard import DeepDriftGuard
+from .vision import DeepDriftVision
+from .router import KineticRouter
 
-__version__ = "0.3.2"
-
-__all__ = [
-    "DeepDriftMonitor",
-    "ObserverConfig",
-    "MonitorState",
-    "diagnose_drift",
-    "plot_drift_profile"
-]
+__version__ = "1.0.0" # Major release!
