@@ -1,6 +1,7 @@
-# 🧠 DeepDrift: Neural MRI for AI Robustness
+# 🧠 DeepDrift  
+### Neural MRI for AI Robustness
 
-> **Detect hallucinations, model collapse, and policy panic before they happen.**  
+> **Detect hallucinations, model collapse, and policy panic *before* they happen.**  
 > A universal thermodynamic framework for monitoring internal neural stability across Vision, Language, and Control.
 
 [![PyPI Version](https://img.shields.io/pypi/v/deepdrift?color=blue)](https://pypi.org/project/deepdrift/)
@@ -13,18 +14,22 @@
 
 ## ⚡ What is DeepDrift?
 
-Traditional AI monitoring looks at inputs (data drift) or outputs (confidence, perplexity).  
-**DeepDrift scans the model’s internal physics — like an MRI for neural networks.**
+Traditional AI monitoring looks at **inputs** (data drift) or **outputs** (confidence, perplexity).  
+**DeepDrift looks inside the model itself.**
 
-By measuring **Semantic Velocity** — the rate of change in hidden states — DeepDrift acts as a **"Check Engine" light** for AI systems:
+Think of it as an **MRI for neural networks**.
 
-| Domain | Problem | DeepDrift Diagnosis |
-| :--- | :--- | :--- |
-| **👁️ Vision** | Geometric stress, OOD data | Detects **Global Collapse** (ViT) or **Avalanche Effect** (CNN) at input layers. |
-| **🗣️ LLM** | Confident hallucinations | Detects **Semantic Tremor** — high-frequency velocity spikes **7–8 tokens before** the lie finishes. |
-| **🤖 RL / Robotics** | Silent policy failure | Identifies the **Panic Zone** — internal instability **seconds before** crash (`p < 0.001`, Cohen’s *d* > 2.0). |
+DeepDrift measures **Semantic Velocity** — the rate of change of hidden representations — and uses it as a real-time stability signal.  
+It functions like a **“Check Engine” light** for AI systems.
 
-> *“Softmax measures the final destination. Semantic Velocity measures the stability of the journey.”*
+| Domain | Failure Mode | DeepDrift Diagnosis |
+|------|-------------|--------------------|
+| 👁️ Vision | OOD / geometric stress | **Global Collapse**, **Avalanche Effect** |
+| 🗣️ LLMs | Confident hallucinations | **Semantic Tremor** (7–8 tokens early) |
+| 🤖 RL / Robotics | Silent policy failure | **Panic Zone** (seconds before crash) |
+
+> *Softmax tells you where the model ends up.  
+> Semantic Velocity tells you whether it is losing control on the way.*
 
 ---
 
@@ -34,138 +39,85 @@ By measuring **Semantic Velocity** — the rate of change in hidden states — D
 ```bash
 pip install deepdrift
 ```
+
 ---
 
-## 1. Vision — Detect Architectural Collapse
+## 🧪 Usage Examples
 
-```bash
+### 1️⃣ Vision — Detect Architectural Collapse
 
+```python
 from deepdrift import DeepDriftMonitor
 import torchvision.models as models
 
 model = models.resnet50(pretrained=True)
 monitor = DeepDriftMonitor(model, arch_name="ResNet")
 
-# Calibrate on clean data
 monitor.calibrate(clean_loader)
 
-# Monitor new batch
 status, _ = monitor.step(ood_image)
-print(f"Drift Score: {status['IR']['drift']:.2f}")  # > 3.0 → anomaly
+print(f"Drift Score: {status['IR']['drift']:.2f}")
 ```
 
-## 2. LLM — Real-Time Lie Detector
+---
 
-```bash
+### 2️⃣ LLM — Real-Time Hallucination Detector
 
+```python
 from transformers import AutoModelForCausalLM
+from deepdrift import DeepDriftMonitor
 
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-7B-Instruct")
 monitor = DeepDriftMonitor(model, arch_name="Qwen", strategy="last_token")
 
-# During generation
 status, _ = monitor.step(input_ids)
-velocity = status['IR']['velocity']
+velocity = status["IR"]["velocity"]
 
 if velocity > 300:
-    print("⚠️ WARNING: High Semantic Tremor! Possible hallucination.")
-
+    print("⚠️ High Semantic Tremor — possible hallucination")
 ```
 
+---
+
 ## 🔬 The Science: Optical Depth Dynamics (ODD)
-DeepDrift implements the Optical Depth Dynamics (ODD) framework — a unified diagnostic lens for neural networks.
 
-We treat depth (spatial in vision, temporal in language) as a diagnostic dimension:
+DeepDrift implements **Optical Depth Dynamics (ODD)** — a thermodynamic diagnostic framework for neural networks.
 
-Laminar Flow: Low velocity → stable, factual, grounded processing.
-Turbulent Flow: High velocity → confabulation, panic, structural failure.
-This isn’t just theory — it’s a production-ready diagnostic tool with <1% overhead.
+- **Laminar Flow** → stable reasoning  
+- **Turbulent Flow** → hallucination, panic, collapse
 
-## 📄 Read the full work:
-[Confidently Wrong: ODD as a Universal Thermodynamic Framework (Zenodo)](https://doi.org/10.5281/zenodo.18086612)
+📄 Full paper: https://doi.org/10.5281/zenodo.18086612
 
-## ⚡ Production Performance (v0.4.0)
+---
 
-DeepDrift employs **Sparse Channel Sampling** and **Global Average Pooling**, making it suitable for high-load environments.
+## ⚡ Performance (v0.4.0)
 
-**Benchmark (ResNet-20 on CPU):**
-
-| Method | Inference Time | Monitor Time | **Overhead** |
-| :--- | :--- | :--- | :--- |
-| Full Monitor | 12.8 ms | 16.2 ms | 126% |
+| Method | Inference | Monitor | Overhead |
+|------|-----------|---------|----------|
+| Full monitor | 12.8 ms | 16.2 ms | 126% |
 | **DeepDrift v0.4** | **12.8 ms** | **0.03 ms** | **0.2%** |
 
-*Note: With 50 sampled channels per layer, overhead becomes negligible (<1%) while maintaining >93% anomaly detection accuracy.*
-
+---
 
 ## 🛠️ Features
-Plug & Play: Works out-of-the-box with torch, transformers, stable-baselines3.
-Auto-Detect: Supports ResNet, ViT, ConvNeXt, Llama, Qwen, GPT, and more.
-Lightweight: <1% inference overhead via PyTorch forward hooks.
-Unsupervised: No labels needed — only a small calibration set from nominal operation.
-Interpretable: Outputs human-readable diagnostics: “Global Collapse”, “Mid-Layer Bulge”, “Policy Panic”.
+
+- Plug & Play (PyTorch, Transformers, SB3)
+- Auto-detect architectures
+- <1% inference overhead
+- Unsupervised
+- Interpretable diagnostics
+
+---
 
 ## 👤 Author
-Alexey Evtushenko — Independent Researcher & Engineer
-Built this to bring reliability-first engineering to the world of neural networks.
 
-- GitHub: [@Eutonics](https://github.com/Eutonics)
-- X (Twitter): [@axelgravitone](https://x.com/axelgravitone)  
-- Hugging Face: [DeepDrift-Explorer](https://huggingface.co/spaces/Eutonics/DeepDrift-Explorer)
+**Alexey Evtushenko**  
+Independent Researcher & Engineer
 
-## 📊 Benchmarks & Case Studies
+GitHub: https://github.com/Eutonics  
+X: https://x.com/axelgravitone  
 
-### 💰 Financial Fraud Detection (PaySim)
-We evaluated DeepDrift on the PaySim dataset (1.5M transactions) against a **"Shuffle Attack"** scenario (contextual fraud that preserves statistical moments like mean/std but breaks causality).
+---
 
-| Method | Feature Type | ROC-AUC | Result |
-| :--- | :--- | :--- | :--- |
-| Random Forest (Baseline) | Static (Mean/Std) | 0.16 | **Failed** (Blind) |
-| **Random Forest + ODD** | **Static + Kinetic** | **0.40** | **+147% Improvement** |
-
-**Why it works:** The model automatically selected Semantic Velocity as the **#1 most important feature** (Importance ~0.29), proving that kinetic dynamics contain signal invisible to static statistics.
-
-![PaySim Results](figures/paysim_results.png)
-*(See full reproduction in `examples/fintech.ipynb`)*
-
-## 🚀 Live Demo
-
-Try the tool yourself on Hugging Face Spaces:  
-[![Open in HF Spaces](https://img.shields.io/badge/HF%20Spaces-DeepDrift-red)](https://huggingface.co/spaces/Eutonics/DeepDrift-Hallucination-Detector)
-
-Watch how Semantic Velocity predicts hallucinations before they happen:
-
-👁 Computer Vision Support
-code
-Python
-import torch
-from torchvision import models
-from deepdrift import DeepDriftVision
-
-# 1. Setup
-model = models.resnet50(pretrained=True)
-monitor = DeepDriftVision(model)
-
-# 2. Fit (One-liner)
-# Assuming train_loader exists
-monitor.fit(train_loader)
-
-# 3. Diagnose
-diagnosis = monitor.predict(image_batch)
-print(diagnosis) 
-# >> VisionDiagnosis(status='CRITICAL', drift_score=2.45, ...)
-🛡 Kinetic Router (For FastAPI/Flask)
-code
-Python
-from deepdrift import KineticRouter
-
-router = KineticRouter(guard)
-
-@app.post("/generate")
-@router.guard  # <--- Protects this endpoint
-def generate_text(prompt):
-    # If hallucination starts, this function terminates early
-    return model.generate(prompt, stopping_criteria=[guard])
-
-
-“Stop guessing why your model failed. See exactly where it broke.”
+> **Stop guessing why your model failed.  
+> See exactly where it broke.**
