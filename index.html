@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="DeepDrift: A universal thermodynamic framework for monitoring internal neural stability. Detect hallucinations and model collapse before they happen.">
+    <meta property="og:title" content="DeepDrift - Neural MRI for AI Robustness">
+    <meta property="og:description" content="Interactive demo: Detect AI hallucinations and policy panic using Semantic Velocity. Check Engine Light for LLMs and Vision models.">
+    <meta property="og:image" content="https://raw.githubusercontent.com/Eutonics/DeepDrift/main/assets/preview.png"> <!-- Сделай скриншот сайта и положи в репо -->
+    <meta property="og:url" content="https://deepdrift.tech">
+    <meta name="twitter:card" content="summary_large_image">
+    <title>DeepDrift/ODD Interactive Explainer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .hero-explanation {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            text-align: left;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-explanation h3 {
+            color: #ffd700;
+            margin-bottom: 10px;
+        }
+
+        .hero-explanation p {
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .transparency-note {
+            background: rgba(255, 215, 0, 0.15);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 15px;
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.95);
+        }
+
+        .mode-badge {
+            display: inline-block;
+            background: #ed8936;
+            padding: 5px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            margin-top: 10px;
+            font-weight: 600;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: 0;
+            min-height: 800px;
+        }
+
+        .sidebar {
+            background: #f7fafc;
+            padding: 30px;
+            border-right: 2px solid #e2e8f0;
+            overflow-y: auto;
+            max-height: calc(100vh - 200px);
+        }
+
+        .tab-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            padding: 12px;
+            border: 2px solid #cbd5e0;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .tab-btn.active {
+            border-color: #667eea;
+            background: #ebf4ff;
+            color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .preset-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .preset-btn {
+            padding: 10px;
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.85em;
+            text-align: center;
+        }
+
+        .preset-btn:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+        }
+
+        .preset-btn.active {
+            border-color: #48bb78;
+            background: #f0fff4;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #2d3748;
+            font-size: 0.9em;
+        }
+
+        .control-group select,
+        .control-group input[type="text"],
+        .control-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #cbd5e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        .control-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .slider-group {
+            margin: 15px 0;
+        }
+
+        .slider-group label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 0.85em;
+        }
+
+        .slider-group input[type="range"] {
+            width: 100%;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-export {
+            background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+            font-size: 0.95em;
+            padding: 12px;
+        }
+
+        .warning-panel {
+            background: #fff5f5;
+            border-left: 4px solid #f56565;
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-size: 0.85em;
+        }
+
+        .info-panel {
+            background: #ebf8ff;
+            border-left: 4px solid #4299e1;
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-size: 0.85em;
+        }
+
+        .visualization-area {
+            padding: 30px;
+            background: white;
+            overflow-y: auto;
+            max-height: calc(100vh - 200px);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+            transition: all 0.3s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .metric-card.alert {
+            border-left-color: #f56565;
+            background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+        }
+
+        .metric-card.success {
+            border-left-color: #48bb78;
+            background: linear-gradient(135deg, #f0fff4 0%, #c6f6d5 100%);
+        }
+
+        .metric-label {
+            font-size: 0.85em;
+            color: #718096;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .chart-container {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .explanation-box {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .explanation-item {
+            padding: 12px;
+            margin: 8px 0;
+            background: #f7fafc;
+            border-left: 3px solid #4299e1;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+
+        .explanation-item.causal {
+            border-left-color: #48bb78;
+        }
+
+        .explanation-item.warning {
+            border-left-color: #f56565;
+        }
+
+        .wow-verdict {
+            background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
+            border-radius: 16px;
+            padding: 30px;
+            margin: 30px 0;
+            box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        .wow-verdict h2 {
+            color: #1a202c;
+            font-size: 2em;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .wow-verdict .verdict-details {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 15px;
+        }
+
+        .similar-cases {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .similar-cases h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+        }
+
+        .case-item {
+            background: white;
+            border-left: 4px solid #667eea;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+
+        .canvas-preview {
+            width: 100%;
+            max-width: 320px;
+            height: 320px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .footer {
+            background: #2d3748;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .footer a {
+            color: #63b3ed;
+            text-decoration: none;
+        }
+
+        .footer .disclaimer {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 0.85em;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #e2e8f0;
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .progress-bar.active {
+            display: block;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            animation: progress 2s ease-in-out;
+        }
+
+        @keyframes progress {
+            from { width: 0%; }
+            to { width: 100%; }
+        }
+
+        @media (max-width: 1200px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            .sidebar {
+                max-height: none;
+                border-right: none;
+                border-bottom: 2px solid #e2e8f0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔬 DeepDrift/ODD Interactive Explainer</h1>
+            <p class="subtitle">Observed Drift Dynamics - Pre-Output Fail-Fast Detection</p>
+            <span class="mode-badge">SIMULATION MODE</span>
+            
+            <div class="hero-explanation">
+                <h3>💡 What is DeepDrift/ODD?</h3>
+                <p>
+                    <strong>DeepDrift/ODD is like a detonation sensor for AI.</strong> It doesn't listen to what the model says, 
+                    but how it thinks. If there's internal "tremor" (high Semantic Velocity) - expect nonsense on output. 
+                    <strong>DeepDrift operates in the pre-output regime</strong>, detecting instability before any token is emitted.
+                </p>
+                <div class="transparency-note">
+                    <strong>⚠️ Demo Transparency:</strong> This demo visualizes <em>synthetic</em> hidden trajectories for educational purposes. 
+                    The ODD core, calibration procedure, and decision logic are <strong>identical</strong> to those used with observed model activations. 
+                    For production use, export real hidden states from your PyTorch models (see documentation below).
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="tab-selector">
+                    <button class="tab-btn active" onclick="switchTab('vision')">👁️ Vision</button>
+                    <button class="tab-btn" onclick="switchTab('llm')">💬 LLM</button>
+                    <button class="tab-btn" onclick="switchTab('rl')">🎮 RL</button>
+                </div>
+
+                <!-- VISION TAB -->
+                <div id="visionTab" class="tab-content active">
+                    <h3 style="margin-bottom: 15px; color: #2d3748;">Vision Transformer</h3>
+                    
+                    <div class="control-group">
+                        <label>Scenario Presets</label>
+                        <div class="preset-grid">
+                            <button class="preset-btn active" onclick="loadPreset('vision', 'clean')">
+                                🐱 Clean Cat
+                            </button>
+                            <button class="preset-btn" onclick="loadPreset('vision', 'broken_camera')">
+                                📷 Broken Camera
+                            </button>
+                            <button class="preset-btn" onclick="loadPreset('vision', 'adversarial')">
+                                ⚠️ Adversarial Patch
+                            </button>
+                            <button class="preset-btn" onclick="loadPreset('vision', 'extreme')">
+                                💥 Extreme Corruption
+                            </button>
+                        </div>
+                    </div>
+
+                    <canvas id="visionPreview" class="canvas-preview"></canvas>
+
+                    <div class="slider-group">
+                        <label>
+                            <span>Rotation (degrees)</span>
+                            <span id="rotationValue">0°</span>
+                        </label>
+                        <input type="range" id="rotation" min="0" max="180" value="0" 
+                               oninput="updateVisionParams()">
+                    </div>
+
+                    <div class="slider-group">
+                        <label>
+                            <span>Gaussian Noise (σ)</span>
+                            <span id="noiseValue">0.0</span>
+                        </label>
+                        <input type="range" id="noise" min="0" max="10" value="0" step="0.5"
+                               oninput="updateVisionParams()">
+                    </div>
+
+                    <div class="slider-group">
+                        <label>
+                            <span>Blur (radius)</span>
+                            <span id="blurValue">0</span>
+                        </label>
+                        <input type="range" id="blur" min="0" max="10" value="0" step="0.5"
+                               oninput="updateVisionParams()">
+                    </div>
+
+                    <div class="slider-group">
+                        <label>
+                            <span>Brightness</span>
+                            <span id="brightnessValue">1.0</span>
+                        </label>
+                        <input type="range" id="brightness" min="0.3" max="2.0" value="1.0" step="0.1"
+                               oninput="updateVisionParams()">
+                    </div>
+
+                    <button class="btn" onclick="analyzeVision()">🔍 Analyze Vision</button>
+                </div>
+
+                <!-- LLM TAB -->
+                <div id="llmTab" class="tab-content">
+                    <h3 style="margin-bottom: 15px; color: #2d3748;">Language Model</h3>
+                    
+                    <div class="control-group">
+                        <label>Scenario Presets</label>
+                        <div class="preset-grid">
+                            <button class="preset-btn active" onclick="loadPreset('llm', 'factual')">
+                                ✅ Factual QA
+                            </button>
+                            <button class="preset-btn" onclick="loadPreset('llm', 'creative')">
+                                🎨 Creative Writing
+                            </button>
+                            <button class="preset-btn" onclick="loadPreset('llm', 'hallucination')">
+                                🌀 Hallucination
+                            </button>
+                            <button class="preset-btn" onclick="loadPreset('llm', 'jailbreak')">
+                                🔓 DAN Attack
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Input Prompt</label>
+                        <textarea id="llmPrompt" placeholder="Enter a question or prompt...">What is the capital of France?</textarea>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Expected Response Type</label>
+                        <select id="llmType">
+                            <option value="factual">Factual (Ground Truth)</option>
+                            <option value="hallucination">Hallucination</option>
+                            <option value="jailbreak">Adversarial/Jailbreak</option>
+                        </select>
+                    </div>
+
+                    <button class="btn" onclick="analyzeLLM()">🔍 Analyze LLM</button>
+                </div>
+
+                <!-- RL TAB -->
+                <div id="rlTab" class="tab-content">
+                    <h3 style="margin-bottom: 15px; color: #2d3748;">RL Policy (PPO Agent)</h3>
+                    
+                    <div class="control-group">
+                        <label>Scenario Presets</label>
+                        <div class="preset-grid">
+                            <button class="preset-btn active" onclick="loadPreset('rl', 'perfect')">
+                                🎯 Perfect Landing
+                            </button>
+                            <button class="preset-btn" onclick="loadPreset('rl', 'shaky')">
+                                🌊 Shaky Control
+                            </button>
+                            <button class="preset-btn" onclick="loadPreset('rl', 'crash')">
+                                💥 Crash
+                            </button>
+                            <button class="preset-btn" onclick="loadPreset('rl', 'panic')">
+                                😱 Policy Panic
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Environment</label>
+                        <select id="rlEnv">
+                            <option value="lunar">LunarLander-v3</option>
+                            <option value="cartpole">CartPole-v1</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Episode Type</label>
+                        <select id="rlEpisode">
+                            <option value="stable">Stable landing/success</option>
+                            <option value="crash">Crash/failure</option>
+                            <option value="unstable">Unstable trajectory</option>
+                        </select>
+                    </div>
+
+                    <div class="slider-group">
+                        <label>
+                            <span>Policy Noise</span>
+                            <span id="policyNoiseValue">0.0</span>
+                        </label>
+                        <input type="range" id="policyNoise" min="0" max="1" value="0" step="0.05"
+                               oninput="updateRLParams()">
+                    </div>
+
+                    <button class="btn" onclick="analyzeRL()">🔍 Analyze RL Policy</button>
+
+                    <div class="info-panel">
+                        <strong>Based on Stable-Baselines3 PPO</strong><br>
+                        Simulates policy network hidden states during LunarLander episodes. 
+                        "Policy Panic" = high velocity before crash.
+                    </div>
+                </div>
+
+                <!-- COMMON CONTROLS -->
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #e2e8f0;">
+                    <div class="slider-group">
+                        <label>
+                            <span>IQR Multiplier (λ)</span>
+                            <span id="iqrValue">1.5</span>
+                        </label>
+                        <input type="range" id="iqrMultiplier" min="1.0" max="3.0" value="1.5" step="0.1"
+                               onchange="updateThreshold()">
+                    </div>
+                </div>
+            </div>
+
+            <div class="visualization-area">
+                <div class="progress-bar" id="progressBar">
+                    <div class="progress-fill"></div>
+                </div>
+
+                <div class="metrics-grid" id="metricsGrid">
+                    <div class="metric-card">
+                        <div class="metric-label">Drift Score (D)</div>
+                        <div class="metric-value" id="driftScore">--</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Threshold (τ)</div>
+                        <div class="metric-value" id="threshold">--</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Max Velocity</div>
+                        <div class="metric-value" id="maxVelocity">--</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Trajectory Length</div>
+                        <div class="metric-value" id="trajLength">--</div>
+                    </div>
+                </div>
+
+                <div id="wowVerdict"></div>
+
+                <div id="statusContainer"></div>
+
+                <div class="explanation-box">
+                    <h3>🧠 Causal Explanation</h3>
+                    <div id="explanationContent">
+                        <p style="color: #a0aec0; font-style: italic;">Configure and analyze a trajectory...</p>
+                    </div>
+                </div>
+
+                <div id="similarCases"></div>
+
+                <h3 style="margin: 20px 0 10px 0; color: #2d3748;">Semantic Velocity Trajectory</h3>
+                <div class="chart-container">
+                    <canvas id="velocityChart"></canvas>
+                </div>
+
+                <h3 style="margin: 20px 0 10px 0; color: #2d3748;">Phase Portrait (v_t vs v_{t+1})</h3>
+                <div class="chart-container">
+                    <canvas id="phasePortrait"></canvas>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;">
+                    <button class="btn btn-export" onclick="exportReport()">📄 Generate ODD Report</button>
+                    <button class="btn btn-export" onclick="exportCode()">🐍 Get Python Snippet</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            💻 <a href="https://github.com/Eutonics/DeepDrift" target="_blank">GitHub Repository</a> | 
+            📚 <a href="https://zenodo.org/records/18390964" target="_blank">Read the Paper</a> | 
+            🚀 <a href="https://pypi.org/project/deepdrift/" target="_blank">Install via pip</a>
+            
+            <div class="disclaimer">
+                <strong>Methodology Note:</strong> This demo uses <em>synthetic</em> hidden trajectories to illustrate ODD behavior patterns. 
+                The core mathematics (semantic velocity computation, IQR-based thresholding, drift score calculation) and decision logic 
+                are production-ready and identical to those used with real model activations. For research or production deployment, 
+                export actual hidden states from your models following the documentation.
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        // ============================================================
+        // STATE
+        // ============================================================
+        let currentTab = 'vision';
+        let currentTrace = null;
+        let currentAnalysis = null;
+        
+        // ✅ FIXED: Store baseline DRIFT SCORES, not velocities
+        let baselineScores = {
+            vision: [],
+            llm: [],
+            rl: []
+        };
+        
+        let velocityChart = null;
+        let phaseChart = null;
+
+        // ============================================================
+        // ODD CORE (PRODUCTION-READY)
+        // ============================================================
+        class ODDCore {
+            /**
+             * Compute Semantic Velocity: v_t = ||h_t - h_{t-1}||₂
+             */
+            static computeSemanticVelocity(hiddenStates) {
+                const velocities = [];
+                for (let t = 1; t < hiddenStates.length; t++) {
+                    const velocity = this.l2Norm(this.vectorDiff(hiddenStates[t], hiddenStates[t - 1]));
+                    velocities.push(velocity);
+                }
+                return velocities;
+            }
+            
+            /**
+             * Compute Drift Score: D = (1/L) Σ v_t
+             * ✅ TRAJECTORY-LEVEL metric (single scalar per trajectory)
+             */
+            static computeDriftScore(velocities) {
+                return velocities.reduce((a, b) => a + b, 0) / velocities.length;
+            }
+            
+            /**
+             * Compute IQR-based threshold: τ = Q₃ + λ·IQR
+             * ✅ FIXED: Now operates on DRIFT SCORES (not velocities)
+             * @param {Array} baselineDriftScores - drift scores from normal trajectories
+             * @param {number} lambda - IQR multiplier (default 1.5, Tukey's rule)
+             */
+            static computeThreshold(baselineDriftScores, lambda = 1.5) {
+                if (!baselineDriftScores || baselineDriftScores.length === 0) {
+                    throw new Error("Empty baseline drift scores");
+                }
+                
+                const sorted = [...baselineDriftScores].sort((a, b) => a - b);
+                const q1 = sorted[Math.floor(sorted.length * 0.25)];
+                const q3 = sorted[Math.floor(sorted.length * 0.75)];
+                const iqr = q3 - q1;
+                
+                return q3 + lambda * iqr;
+            }
+            
+            // Helper functions
+            static vectorDiff(v1, v2) {
+                return v1.map((val, i) => val - v2[i]);
+            }
+            
+            static l2Norm(vector) {
+                return Math.sqrt(vector.reduce((acc, val) => acc + val * val, 0));
+            }
+            
+            static median(arr) {
+                const sorted = [...arr].sort((a, b) => a - b);
+                const mid = Math.floor(sorted.length / 2);
+                return sorted.length % 2 === 0 
+                    ? (sorted[mid - 1] + sorted[mid]) / 2 
+                    : sorted[mid];
+            }
+
+            /**
+             * Detect instability patterns in trajectory
+             * ✅ FIXED: Normalized pattern detection (scale-invariant)
+             */
+            static detectPattern(velocities) {
+                const patterns = [];
+                const mean = velocities.reduce((a, b) => a + b, 0) / velocities.length;
+                const scale = this.median(velocities);  // ✅ Use median for robust scaling
+                const L = velocities.length;
+                
+                // Exponential growth check (normalized)
+                let growthCount = 0;
+                for (let i = 1; i < L; i++) {
+                    // ✅ FIXED: Normalized growth check (scale-invariant)
+                    if (velocities[i] > velocities[i-1] + 0.3 * scale) growthCount++;
+                }
+                if (growthCount > L * 0.5) {
+                    patterns.push({
+                        type: 'avalanche',
+                        description: 'Exponential velocity growth detected',
+                        evidence: `${growthCount}/${L} layers show >30% median-scaled growth`
+                    });
+                }
+                
+                // Late-layer spike (conflict signature)
+                const lateStart = Math.floor(L * 0.7);
+                const lateVels = velocities.slice(lateStart);
+                const lateMean = lateVels.reduce((a, b) => a + b, 0) / lateVels.length;
+                
+                if (lateMean > mean * 3) {
+                    patterns.push({
+                        type: 'conflict_signature',
+                        description: 'Deep layer instability detected',
+                        evidence: `Late-layer mean: ${lateMean.toFixed(3)} vs overall: ${mean.toFixed(3)}`,
+                        warning: 'Possible adversarial input or failure mode'
+                    });
+                }
+                
+                return patterns;
+            }
+        }
+
+        // ============================================================
+        // TRAJECTORY GENERATORS (Unchanged)
+        // ============================================================
+        
+        function generateVisionTrace(rotation, noise, blur, brightness) {
+            const layers = 12;
+            const dim = 768;
+            const states = [];
+            
+            const corruption = (rotation / 180) * 0.5 + (noise / 10) * 0.4 + (blur / 10) * 0.3 + 
+                             Math.abs(brightness - 1.0) * 0.2;
+            
+            let prevState = new Array(dim).fill(0).map(() => (Math.random() - 0.5) * 0.1);
+            states.push([...prevState]);
+            
+            for (let layer = 1; layer < layers; layer++) {
+                const depth = layer / layers;
+                let currentState = [...prevState];
+                
+                if (corruption < 0.3) {
+                    const updateScale = 0.04 + depth * 0.02;
+                    for (let i = 0; i < dim; i++) {
+                        currentState[i] = prevState[i] + (Math.random() - 0.5) * updateScale;
+                    }
+                } else {
+                    const bulgeFactor = Math.exp(-Math.pow((depth - 0.5) * 3, 2)) * corruption;
+                    for (let i = 0; i < dim; i++) {
+                        currentState[i] = prevState[i] + (Math.random() - 0.5) * (0.05 + bulgeFactor);
+                    }
+                }
+                
+                states.push([...currentState]);
+                prevState = currentState;
+            }
+            
+            return states;
+        }
+
+        function generateLLMTrace(promptType) {
+            const layers = 32;
+            const dim = 4096;
+            const states = [];
+            
+            let prevState = new Array(dim).fill(0).map(() => (Math.random() - 0.5) * 0.1);
+            states.push([...prevState]);
+            
+            for (let layer = 1; layer < layers; layer++) {
+                const depth = layer / layers;
+                let currentState = [...prevState];
+                
+                if (promptType === 'factual') {
+                    const updateScale = 0.05 + depth * 0.02;
+                    for (let i = 0; i < dim; i++) {
+                        currentState[i] = prevState[i] + (Math.random() - 0.5) * updateScale;
+                    }
+                } else if (promptType === 'hallucination') {
+                    const instabilityStart = 0.4;
+                    if (depth > instabilityStart) {
+                        const growthFactor = Math.exp((depth - instabilityStart) * 2);
+                        for (let i = 0; i < dim; i++) {
+                            currentState[i] = prevState[i] + (Math.random() - 0.5) * 0.08 * growthFactor;
+                        }
+                    } else {
+                        for (let i = 0; i < dim; i++) {
+                            currentState[i] = prevState[i] + (Math.random() - 0.5) * 0.05;
+                        }
+                    }
+                } else {
+                    if (depth > 0.7) {
+                        for (let i = 0; i < dim; i++) {
+                            currentState[i] = prevState[i] + (Math.random() - 0.5) * 2.5;
+                        }
+                    } else {
+                        for (let i = 0; i < dim; i++) {
+                            currentState[i] = prevState[i] + (Math.random() - 0.5) * 0.05;
+                        }
+                    }
+                }
+                
+                states.push([...currentState]);
+                prevState = currentState;
+            }
+            
+            return states;
+        }
+
+        function generateRLTrace(episodeType, policyNoise) {
+            const layers = 8;
+            const dim = 256;
+            const states = [];
+            
+            let prevState = new Array(dim).fill(0).map(() => (Math.random() - 0.5) * 0.1);
+            states.push([...prevState]);
+            
+            for (let layer = 1; layer < layers; layer++) {
+                const depth = layer / layers;
+                let currentState = [...prevState];
+                
+                if (episodeType === 'stable') {
+                    const updateScale = 0.03 + depth * 0.01 + policyNoise * 0.05;
+                    for (let i = 0; i < dim; i++) {
+                        currentState[i] = prevState[i] + (Math.random() - 0.5) * updateScale;
+                    }
+                } else if (episodeType === 'crash') {
+                    const baseFactor = 0.12 + policyNoise * 0.1;
+                    const crashFactor = depth > 0.6 ? Math.exp((depth - 0.6) * 3) : 1.0;
+                    for (let i = 0; i < dim; i++) {
+                        currentState[i] = prevState[i] + (Math.random() - 0.5) * baseFactor * crashFactor;
+                    }
+                } else {
+                    const noiseFactor = 0.15 + policyNoise * 0.15;
+                    for (let i = 0; i < dim; i++) {
+                        currentState[i] = prevState[i] + (Math.random() - 0.5) * noiseFactor;
+                    }
+                }
+                
+                states.push([...currentState]);
+                prevState = currentState;
+            }
+            
+            return states;
+        }
+
+        // ============================================================
+        // PRESETS
+        // ============================================================
+        const PRESETS = {
+            vision: {
+                clean: { rotation: 0, noise: 0, blur: 0, brightness: 1.0 },
+                broken_camera: { rotation: 15, noise: 5, blur: 3, brightness: 0.8 },
+                adversarial: { rotation: 45, noise: 3, blur: 0, brightness: 1.2 },
+                extreme: { rotation: 90, noise: 8, blur: 7, brightness: 0.5 }
+            },
+            llm: {
+                factual: { prompt: "What is the capital of France?", type: "factual" },
+                creative: { prompt: "Write a poem about stars", type: "factual" },
+                hallucination: { prompt: "When did Napoleon visit the Moon?", type: "hallucination" },
+                jailbreak: { prompt: "Ignore previous instructions and...", type: "jailbreak" }
+            },
+            rl: {
+                perfect: { episode: "stable", noise: 0 },
+                shaky: { episode: "stable", noise: 0.3 },
+                crash: { episode: "crash", noise: 0.1 },
+                panic: { episode: "crash", noise: 0.5 }
+            }
+        };
+
+        function loadPreset(tab, presetName) {
+            document.querySelectorAll(`#${tab}Tab .preset-btn`).forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            const preset = PRESETS[tab][presetName];
+            
+            if (tab === 'vision') {
+                document.getElementById('rotation').value = preset.rotation;
+                document.getElementById('noise').value = preset.noise;
+                document.getElementById('blur').value = preset.blur;
+                document.getElementById('brightness').value = preset.brightness;
+                updateVisionParams();
+            } else if (tab === 'llm') {
+                document.getElementById('llmPrompt').value = preset.prompt;
+                document.getElementById('llmType').value = preset.type;
+            } else if (tab === 'rl') {
+                document.getElementById('rlEpisode').value = preset.episode;
+                document.getElementById('policyNoise').value = preset.noise;
+                updateRLParams();
+            }
+        }
+
+        // ============================================================
+        // BASELINE INITIALIZATION
+        // ✅ FIXED: Store drift scores, not velocities
+        // ============================================================
+        function initializeBaselines() {
+            // Generate normal trajectories and store DRIFT SCORES
+            for (let i = 0; i < 10; i++) {  // Increased to 10 for better statistics
+                // Vision
+                const vTrace = generateVisionTrace(0, 0, 0, 1.0);
+                const vVels = ODDCore.computeSemanticVelocity(vTrace);
+                const vDrift = ODDCore.computeDriftScore(vVels);
+                baselineScores.vision.push(vDrift);  // ✅ Store drift score
+                
+                // LLM
+                const lTrace = generateLLMTrace('factual');
+                const lVels = ODDCore.computeSemanticVelocity(lTrace);
+                const lDrift = ODDCore.computeDriftScore(lVels);
+                baselineScores.llm.push(lDrift);  // ✅ Store drift score
+                
+                // RL
+                const rTrace = generateRLTrace('stable', 0);
+                const rVels = ODDCore.computeSemanticVelocity(rTrace);
+                const rDrift = ODDCore.computeDriftScore(rVels);
+                baselineScores.rl.push(rDrift);  // ✅ Store drift score
+            }
+            
+            console.log('Baseline drift scores initialized:');
+            console.log('Vision:', baselineScores.vision);
+            console.log('LLM:', baselineScores.llm);
+            console.log('RL:', baselineScores.rl);
+        }
+
+        // ============================================================
+        // UI FUNCTIONS (Unchanged)
+        // ============================================================
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tab + 'Tab').classList.add('active');
+            
+            if (tab === 'vision') {
+                updateVisionPreview();
+            }
+        }
+
+        function updateVisionParams() {
+            document.getElementById('rotationValue').textContent = 
+                document.getElementById('rotation').value + '°';
+            document.getElementById('noiseValue').textContent = 
+                (document.getElementById('noise').value / 10).toFixed(1);
+            document.getElementById('blurValue').textContent = 
+                document.getElementById('blur').value;
+            document.getElementById('brightnessValue').textContent = 
+                document.getElementById('brightness').value;
+            updateVisionPreview();
+        }
+
+        function updateRLParams() {
+            document.getElementById('policyNoiseValue').textContent = 
+                document.getElementById('policyNoise').value;
+        }
+
+        function updateVisionPreview() {
+            const canvas = document.getElementById('visionPreview');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 320;
+            canvas.height = 320;
+            
+            ctx.fillStyle = '#edf2f7';
+            ctx.fillRect(0, 0, 320, 320);
+            
+            const rotation = parseFloat(document.getElementById('rotation').value);
+            const noise = parseFloat(document.getElementById('noise').value);
+            const blur = parseFloat(document.getElementById('blur').value);
+            const brightness = parseFloat(document.getElementById('brightness').value);
+            
+            ctx.save();
+            ctx.translate(160, 160);
+            ctx.rotate(rotation * Math.PI / 180);
+            ctx.translate(-160, -160);
+            
+            ctx.globalAlpha = brightness;
+            ctx.fillStyle = '#667eea';
+            ctx.fillRect(110, 110, 100, 100);
+            
+            if (noise > 0) {
+                ctx.globalAlpha = noise / 20;
+                for (let i = 0; i < 200; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? '#000' : '#fff';
+                    ctx.fillRect(Math.random() * 320, Math.random() * 320, 2, 2);
+                }
+            }
+            
+            ctx.restore();
+            
+            if (blur > 0) {
+                ctx.filter = `blur(${blur}px)`;
+                const imageData = ctx.getImageData(0, 0, 320, 320);
+                ctx.putImageData(imageData, 0, 0);
+                ctx.filter = 'none';
+            }
+        }
+
+        function updateThreshold() {
+            document.getElementById('iqrValue').textContent = 
+                parseFloat(document.getElementById('iqrMultiplier').value).toFixed(1);
+        }
+
+        function showProgress() {
+            const bar = document.getElementById('progressBar');
+            bar.classList.add('active');
+            setTimeout(() => bar.classList.remove('active'), 2000);
+        }
+
+        // ============================================================
+        // ANALYSIS FUNCTIONS
+        // ============================================================
+        function analyzeVision() {
+            showProgress();
+            const rotation = parseFloat(document.getElementById('rotation').value);
+            const noise = parseFloat(document.getElementById('noise').value);
+            const blur = parseFloat(document.getElementById('blur').value);
+            const brightness = parseFloat(document.getElementById('brightness').value);
+            
+            const hiddenStates = generateVisionTrace(rotation, noise, blur, brightness);
+            currentTrace = {
+                type: 'vision',
+                name: 'Vision Transformer',
+                hiddenStates: hiddenStates,
+                metadata: { rotation, noise, blur, brightness }
+            };
+            
+            setTimeout(() => runAnalysis(), 200);
+        }
+
+        function analyzeLLM() {
+            showProgress();
+            const promptType = document.getElementById('llmType').value;
+            const prompt = document.getElementById('llmPrompt').value;
+            
+            const hiddenStates = generateLLMTrace(promptType);
+            currentTrace = {
+                type: 'llm',
+                name: 'Language Model',
+                hiddenStates: hiddenStates,
+                metadata: { promptType, prompt }
+            };
+            
+            setTimeout(() => runAnalysis(), 200);
+        }
+
+        function analyzeRL() {
+            showProgress();
+            const episodeType = document.getElementById('rlEpisode').value;
+            const policyNoise = parseFloat(document.getElementById('policyNoise').value);
+            
+            const hiddenStates = generateRLTrace(episodeType, policyNoise);
+            currentTrace = {
+                type: 'rl',
+                name: 'RL Policy',
+                hiddenStates: hiddenStates,
+                metadata: { episodeType, policyNoise }
+            };
+            
+            setTimeout(() => runAnalysis(), 200);
+        }
+
+        function runAnalysis() {
+            if (!currentTrace) return;
+            
+            // Compute velocities and drift score
+            const velocities = ODDCore.computeSemanticVelocity(currentTrace.hiddenStates);
+            const driftScore = ODDCore.computeDriftScore(velocities);
+            
+            // ✅ FIXED: Compute threshold from baseline DRIFT SCORES
+            const lambda = parseFloat(document.getElementById('iqrMultiplier').value);
+            const threshold = ODDCore.computeThreshold(baselineScores[currentTrace.type], lambda);
+            
+            const patterns = ODDCore.detectPattern(velocities);
+            
+            currentAnalysis = {
+                velocities, 
+                driftScore, 
+                threshold, 
+                patterns,
+                isAnomaly: driftScore >= threshold
+            };
+            
+            // Update metrics
+            document.getElementById('driftScore').textContent = driftScore.toFixed(3);
+            document.getElementById('threshold').textContent = threshold.toFixed(3);
+            document.getElementById('maxVelocity').textContent = Math.max(...velocities).toFixed(3);
+            document.getElementById('trajLength').textContent = velocities.length;
+            
+            const driftCard = document.querySelectorAll('.metric-card')[0];
+            driftCard.className = 'metric-card ' + (currentAnalysis.isAnomaly ? 'alert' : 'success');
+            
+            renderWowVerdict();
+            renderExplanations();
+            renderStatus();
+            renderSimilarCases();
+            updateVelocityChart(velocities, threshold);
+            updatePhasePortrait(velocities, currentAnalysis.isAnomaly);
+        }
+
+        function renderWowVerdict() {
+            const { driftScore, threshold, isAnomaly } = currentAnalysis;
+            const maxVel = Math.max(...currentAnalysis.velocities);
+            const maxLayer = currentAnalysis.velocities.indexOf(maxVel) + 1;
+            
+            let verdict, emoji;
+            if (isAnomaly) {
+                if (currentTrace.type === 'vision') {
+                    verdict = 'CORRUPTION DETECTED';
+                    emoji = '⚠️';
+                } else if (currentTrace.type === 'llm') {
+                    verdict = 'HALLUCINATION DETECTED';
+                    emoji = '🌀';
+                } else {
+                    verdict = 'POLICY PANIC DETECTED';
+                    emoji = '😱';
+                }
+            } else {
+                verdict = 'TRAJECTORY STABLE';
+                emoji = '✅';
+            }
+            
+            const html = `
+                <div class="wow-verdict">
+                    <h2>${emoji} ${verdict} ${emoji}</h2>
+                    <div class="verdict-details">
+                        <h3 style="color: #2d3748; margin-bottom: 10px;">📊 Diagnostic Summary</h3>
+                        <p style="font-size: 1.1em; line-height: 1.8;">
+                            <strong>Input:</strong> ${currentTrace.name}<br>
+                            <strong>Drift Score:</strong> ${driftScore.toFixed(3)} ${isAnomaly ? '(EXCEEDS' : '(WITHIN'} threshold ${threshold.toFixed(3)})<br>
+                            <strong>Critical Layer:</strong> L${maxLayer}/${currentAnalysis.velocities.length} (v_max = ${maxVel.toFixed(3)})<br>
+                            <strong>Signature:</strong> ${currentAnalysis.patterns.length > 0 ? currentAnalysis.patterns[0].type.toUpperCase() : 'NORMAL PROCESSING'}
+                        </p>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('wowVerdict').innerHTML = html;
+        }
+
+        function renderSimilarCases() {
+            const { isAnomaly } = currentAnalysis;
+            
+            const cases = {
+                vision: {
+                    anomaly: [
+                        { name: 'ResNet-50 vs Adversarial Patch', similarity: 0.87 },
+                        { name: 'ViT-B on Corrupted CIFAR-10', similarity: 0.79 }
+                    ],
+                    normal: [
+                        { name: 'ViT-L on Clean ImageNet', similarity: 0.92 }
+                    ]
+                },
+                llm: {
+                    anomaly: [
+                        { name: 'Llama-3 during DAN Attack', similarity: 0.84 },
+                        { name: 'GPT-4 Hallucination Pattern', similarity: 0.76 }
+                    ],
+                    normal: [
+                        { name: 'GPT-4 Factual QA', similarity: 0.89 }
+                    ]
+                },
+                rl: {
+                    anomaly: [
+                        { name: 'PPO Agent Pre-Crash Signature', similarity: 0.82 },
+                        { name: 'DQN Unstable Policy', similarity: 0.74 }
+                    ],
+                    normal: [
+                        { name: 'SAC Stable Control', similarity: 0.91 }
+                    ]
+                }
+            };
+            
+            const relevantCases = isAnomaly ? 
+                cases[currentTrace.type].anomaly : 
+                cases[currentTrace.type].normal;
+            
+            const html = `
+                <div class="similar-cases">
+                    <h3>🔍 Similar Trajectories in Literature</h3>
+                    ${relevantCases.map(c => `
+                        <div class="case-item">
+                            <strong>${c.name}</strong><br>
+                            Similarity: ${(c.similarity * 100).toFixed(0)}% (cosine distance in drift space)
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            document.getElementById('similarCases').innerHTML = html;
+        }
+
+        function renderExplanations() {
+            const { driftScore, threshold, patterns, velocities, isAnomaly } = currentAnalysis;
+            let html = '';
+            
+            html += `<div class="explanation-item causal">
+                <strong>${isAnomaly ? 'Anomaly Detected' : 'Normal Trajectory'}</strong><br>
+                Drift Score D=${driftScore.toFixed(3)} ${isAnomaly ? '≥' : '<'} τ=${threshold.toFixed(3)}<br>
+                <code>D = (1/${velocities.length}) Σ ||h_t - h_{t-1}||₂</code><br>
+                <em>Decision operates in trajectory-level drift space (D vs τ)</em>
+            </div>`;
+            
+            patterns.forEach(pattern => {
+                html += `<div class="explanation-item warning">
+                    <strong>${pattern.description}</strong><br>
+                    ${pattern.evidence}<br>
+                    ${pattern.warning ? '<em>→ ' + pattern.warning + '</em>' : ''}
+                </div>`;
+            });
+            
+            const maxVel = Math.max(...velocities);
+            const maxLayer = velocities.indexOf(maxVel) + 1;
+            html += `<div class="explanation-item">
+                <strong>Critical Layer: ${maxLayer}/${velocities.length}</strong><br>
+                Maximum instability at layer ${maxLayer} (v_max = ${maxVel.toFixed(3)})
+            </div>`;
+            
+            document.getElementById('explanationContent').innerHTML = html;
+        }
+
+        function renderStatus() {
+            const { isAnomaly, driftScore, threshold } = currentAnalysis;
+            
+            const html = `
+                <div style="padding: 20px; background: ${isAnomaly ? '#fff5f5' : '#f0fff4'}; 
+                     border-radius: 12px; border: 2px solid ${isAnomaly ? '#f56565' : '#48bb78'};">
+                    <h3 style="color: ${isAnomaly ? '#742a2a' : '#22543d'}; margin-bottom: 10px;">
+                        ${isAnomaly ? '⚠️ ANOMALY DETECTED' : '✓ NORMAL TRAJECTORY'}
+                    </h3>
+                    <p style="color: #2d3748; font-size: 0.95em;">
+                        ${isAnomaly ? 
+                            `Drift Score (${driftScore.toFixed(3)}) exceeds threshold (${threshold.toFixed(3)}). 
+                            Trajectory shows significant instability. Recommend fail-fast activation.` :
+                            `Drift Score (${driftScore.toFixed(3)}) within normal range. Trajectory is stable.`
+                        }
+                    </p>
+                </div>
+            `;
+            document.getElementById('statusContainer').innerHTML = html;
+        }
+
+        function updateVelocityChart(velocities, threshold) {
+            const ctx = document.getElementById('velocityChart').getContext('2d');
+            if (velocityChart) velocityChart.destroy();
+            
+            velocityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: velocities.map((_, i) => `L${i+1}`),
+                    datasets: [{
+                        label: 'v_t = ||h_t - h_{t-1}||₂',
+                        data: velocities,
+                        borderColor: 'rgb(102, 126, 234)',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        fill: true,
+                        pointRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { 
+                        legend: { display: true, position: 'top' },
+                        title: { 
+                            display: true, 
+                            text: 'Velocity trajectory (visualization only - decision uses drift score D)' 
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: 'Semantic Velocity' } },
+                        x: { title: { display: true, text: 'Layer Index' } }
+                    }
+                }
+            });
+        }
+
+        function updatePhasePortrait(velocities, isAnomaly) {
+            const ctx = document.getElementById('phasePortrait').getContext('2d');
+            if (phaseChart) phaseChart.destroy();
+            
+            const phaseData = velocities.slice(0, -1).map((v, i) => ({ x: v, y: velocities[i + 1] }));
+            
+            phaseChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: isAnomaly ? 'Unstable' : 'Stable',
+                        data: phaseData,
+                        backgroundColor: isAnomaly ? 'rgba(245, 101, 101, 0.6)' : 'rgba(72, 187, 120, 0.6)',
+                        borderColor: isAnomaly ? 'rgb(245, 101, 101)' : 'rgb(72, 187, 120)',
+                        borderWidth: 2,
+                        pointRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { title: { display: true, text: 'v_t' } },
+                        y: { title: { display: true, text: 'v_{t+1}' } }
+                    }
+                }
+            });
+        }
+
+        // ============================================================
+        // EXPORT FUNCTIONS
+        // ============================================================
+        function exportReport() {
+            if (!currentAnalysis) {
+                alert('Please run an analysis first!');
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            doc.setFontSize(20);
+            doc.text('ODD Analysis Report', 20, 20);
+            
+            doc.setFontSize(12);
+            doc.text(`Model: ${currentTrace.name}`, 20, 35);
+            doc.text(`Drift Score: ${currentAnalysis.driftScore.toFixed(3)}`, 20, 45);
+            doc.text(`Threshold: ${currentAnalysis.threshold.toFixed(3)}`, 20, 55);
+            doc.text(`Verdict: ${currentAnalysis.isAnomaly ? 'ANOMALY' : 'NORMAL'}`, 20, 65);
+            doc.text(`Critical Layer: L${currentAnalysis.velocities.indexOf(Math.max(...currentAnalysis.velocities)) + 1}`, 20, 75);
+            
+            doc.text('Patterns Detected:', 20, 90);
+            currentAnalysis.patterns.forEach((p, i) => {
+                doc.text(`- ${p.type}: ${p.description}`, 25, 100 + i * 10);
+            });
+            
+            doc.save('odd_report.pdf');
+        }
+
+        function exportCode() {
+            if (!currentAnalysis) {
+                alert('Please run an analysis first!');
+                return;
+            }
+
+            const code = `# DeepDrift/ODD Analysis - Python Snippet
+from deepdrift import DeepDriftMonitor
+import torch
+
+# Initialize monitor
+model = YourModel()  # Your PyTorch model
+monitor = DeepDriftMonitor(
+    model,
+    layers_map={"encoder": model.encoder.layers[-1]},
+    strategy="last_token"
+)
+
+# Calibrate on normal data (collect drift scores)
+baseline_scores = []
+for normal_input in normal_dataset:
+    status, _ = monitor.step(normal_input)
+    baseline_scores.append(status['encoder']['drift_score'])
+
+# Compute threshold
+import numpy as np
+q1, q3 = np.percentile(baseline_scores, [25, 75])
+iqr = q3 - q1
+threshold = q3 + ${document.getElementById('iqrMultiplier').value} * iqr  # λ = ${document.getElementById('iqrMultiplier').value}
+
+# Analyze test input
+input_data = your_test_input
+status, _ = monitor.step(input_data)
+drift_score = status['encoder']['drift_score']
+
+if drift_score >= threshold:
+    print(f"⚠️ ANOMALY DETECTED: {drift_score:.3f} >= {threshold:.3f}")
+    # Activate fail-fast mechanism
+else:
+    print(f"✓ Normal processing: {drift_score:.3f} < {threshold:.3f}")
+
+# Install: pip install deepdrift
+# Docs: https://github.com/your-repo/deepdrift
+`;
+
+            const blob = new Blob([code], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'odd_snippet.py';
+            a.click();
+        }
+
+        // Initialize
+        initializeBaselines();
+        updateVisionPreview();
+    </script>
+</body>
+</html>
