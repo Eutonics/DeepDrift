@@ -1,38 +1,41 @@
+"""
+Unit tests for DeepDriftVision wrapper.
+"""
+
+import pytest
 import torch
 import torch.nn as nn
-from deepdrift import DeepDriftVision
-from deepdrift.diagnostics import VisionDiagnosis
+from deepdrift.vision import DeepDriftVision
 
 class MockVision(nn.Module):
+    """Mock ViT-like model for testing."""
     def __init__(self):
         super().__init__()
-        self.encoder = nn.Sequential(
-            nn.Conv2d(3, 8, 3),
-            nn.AdaptiveAvgPool2d((1, 1))
-        )
-        self.fc = nn.Linear(8, 2)
+        self.encoder = nn.ModuleList([
+            nn.Linear(768, 768) for _ in range(12)
+        ])
+        self.head = nn.Linear(768, 100)
+    
     def forward(self, x):
-        return self.fc(self.encoder(x).flatten(1))
+        # Simulate ViT forward: assume x is already [B, N, D]
+        for layer in self.encoder:
+            x = layer(x)
+        x = x[:, 0, :]  # CLS token
+        x = self.head(x)
+        return x
 
 def test_vision_predict():
+    """Test that DeepDriftVision.predict runs without errors."""
     model = MockVision()
-    # Mock some layer names for the heuristic
-    for i, m in enumerate(model.encoder):
-        setattr(model.encoder, f'layer_{i}', m)
-
-    # We'll explicitly set layer names for test stability
-    monitor = DeepDriftVision(model)
-    monitor.monitor.layer_names = ['encoder.0', 'fc']
-    monitor.monitor._register_all_hooks()
-
-    # Calibrate
-    calib_data = [torch.randn(2, 3, 32, 32) for _ in range(3)]
-    monitor.fit(calib_data)
-
-    # Predict
-    x = torch.randn(1, 3, 32, 32)
-    diag = monitor.predict(x)
-
-    assert isinstance(diag, VisionDiagnosis)
-    assert hasattr(diag, 'peak_velocity')
-    assert hasattr(diag, 'is_anomaly')
+    monitor = DeepDriftVision(model, auto_hook=True, pooling='cls')
+    
+    # Create dummy input: [B, Seq, Dim]
+    x = torch.randn(2, 197, 768)
+    
+    # Should not raise
+    diagnosis = monitor.predict(x)
+    
+    assert hasattr(diagnosis, 'peak_velocity')
+    assert hasattr(diagnosis, 'layer_velocities')
+    assert isinstance(diagnosis.peak_velocity, float)
+    assert isinstance(diagnosis.layer_velocities, list)
