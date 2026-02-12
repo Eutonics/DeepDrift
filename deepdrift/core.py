@@ -15,7 +15,8 @@ class DeepDriftMonitor:
         pooling: Union[str, Callable] = "cls",
         n_channels: Optional[int] = None,
         seed: int = 42,
-        device: str = "cpu"
+        device: str = "cpu",
+        debug: bool = False
     ):
         """
         Unified monitor for Semantic Velocity.
@@ -28,6 +29,7 @@ class DeepDriftMonitor:
             n_channels: Number of channels for sparse sampling (None = use all).
             seed: Random seed for reproducibility.
             device: Device to run calibration on.
+            debug: Print debug information.
         """
         self.model = model
         self.device = device
@@ -35,6 +37,7 @@ class DeepDriftMonitor:
         self.pooling_fn = get_pooling_fn(pooling)
         self.n_channels = n_channels
         self.seed = seed
+        self.debug = debug
 
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -52,6 +55,8 @@ class DeepDriftMonitor:
         self.calibration_stats = {}
 
         self._register_all_hooks()
+        if self.debug:
+            print(f"[DeepDrift] Initialized with layers: {self.layer_names}")
 
     def _register_all_hooks(self):
         """Register forward hooks on all target layers."""
@@ -73,37 +78,66 @@ class DeepDriftMonitor:
                     pooled = pooled[..., self.channel_indices[name]]
 
                 self.activations[name] = pooled.detach()
+                
+                if self.debug:
+                    print(f"[DeepDrift] Hook {name}: pooled shape {pooled.shape}")
             return hook
 
         if self.layer_names:
             self.hooks = register_hooks(self.model, self.layer_names, make_hook)
+            if self.debug:
+                print(f"[DeepDrift] Registered hooks on: {self.layer_names}")
 
     def get_spatial_velocity(self) -> List[float]:
         """
         Returns L2-norms between successive layers for the current batch.
-        Handles layers with different dimensions gracefully.
+        Handles layers with different dimensions safely.
         """
         if len(self.activations) < 2:
+            if self.debug:
+                print(f"[DeepDrift] Not enough activations: {len(self.activations)}")
             return []
 
         available_names = sorted(self.activations.keys())
         acts = [self.activations[name] for name in available_names]
 
+        if self.debug:
+            print(f"[DeepDrift] Computing spatial velocity for layers: {available_names}")
+            for name, act in zip(available_names, acts):
+                print(f"  {name}: shape {act.shape}")
+
         velocities = []
         for i in range(len(acts) - 1):
             a, b = acts[i], acts[i + 1]
+            name_a = available_names[i]
+            name_b = available_names[i + 1]
 
-            # If dimensions match → compute L2 difference
+            # SAFETY: Ensure tensors are on the same device
+            if a.device != b.device:
+                b = b.to(a.device)
+
             if a.shape[-1] == b.shape[-1]:
-                diff = b - a
-                vel = torch.norm(diff, p=2, dim=-1).mean().item()
+                # Dimensions match → direct subtraction
+                try:
+                    diff = b - a
+                    vel = torch.norm(diff, p=2, dim=-1).mean().item()
+                    method = "direct"
+                except RuntimeError:
+                    # Fallback if subtraction fails
+                    norm_a = torch.norm(a, p=2, dim=-1)
+                    norm_b = torch.norm(b, p=2, dim=-1)
+                    vel = torch.abs(norm_b - norm_a).mean().item()
+                    method = "norm_diff (fallback)"
             else:
-                # Fallback: | ||b|| - ||a|| |
+                # Dimensions differ → fallback to norm difference
                 norm_a = torch.norm(a, p=2, dim=-1)
                 norm_b = torch.norm(b, p=2, dim=-1)
                 vel = torch.abs(norm_b - norm_a).mean().item()
+                method = "norm_diff"
 
             velocities.append(vel)
+            if self.debug:
+                print(f"  {name_a} → {name_b}: vel={vel:.6f} ({method})")
 
         return velocities
 
@@ -112,6 +146,8 @@ class DeepDriftMonitor:
         Returns L2-norm between current and previous state of the first monitored layer.
         """
         if not self.activations:
+            if self.debug:
+                print("[DeepDrift] No activations for temporal velocity")
             return 0.0
 
         available_names = sorted(self.activations.keys())
@@ -122,12 +158,23 @@ class DeepDriftMonitor:
         current_state = self.activations[current_layer_name]
 
         if self.prev_state is None or step == 0:
-            self.prev_state = current_state
+            self.prev_state = current_state.clone()  # clone to avoid in-place modification
+            if self.debug:
+                print(f"[DeepDrift] Temporal: initialized prev_state from {current_layer_name}, shape {current_state.shape}")
             return 0.0
 
+        # Compute difference
         diff = current_state - self.prev_state
         velocity = torch.norm(diff, p=2, dim=-1).mean().item()
-        self.prev_state = current_state
+        
+        # Update previous state for next call
+        self.prev_state = current_state.clone()
+        
+        if self.debug:
+            print(f"[DeepDrift] Temporal velocity: {velocity:.6f}")
+            if velocity == 0.0:
+                print(f"[DeepDrift] WARNING: velocity is zero. prev and current may be identical.")
+        
         return velocity
 
     def calibrate(
@@ -245,6 +292,9 @@ class DeepDriftMonitor:
             a = self.activations[name1]
             b = self.activations[name2]
 
+            if a.device != b.device:
+                b = b.to(a.device)
+
             if a.shape[-1] == b.shape[-1]:
                 diff = b - a
                 vel = torch.norm(diff, p=2, dim=-1).mean().item()
@@ -261,13 +311,19 @@ class DeepDriftMonitor:
         """Reset stored activations and temporal state."""
         self.activations = {}
         self.prev_state = None
+        if self.debug:
+            print("[DeepDrift] Cleared activations and temporal state")
 
     def remove_hooks(self):
         """Remove all registered hooks."""
         for hook in self.hooks:
             hook.remove()
         self.hooks = []
+        if self.debug:
+            print("[DeepDrift] Removed all hooks")
 
     def reset_temporal(self):
         """Reset temporal velocity state."""
         self.prev_state = None
+        if self.debug:
+            print("[DeepDrift] Reset temporal state")
