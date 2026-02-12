@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from typing import List, Optional, Union, Callable, Dict, Any
-from .utils.pooling import get_pooling_fn, sparse_sample
+from .utils.pooling import get_pooling_fn
 from .utils.hooks import register_hooks, find_target_layers
 from .utils.stats import compute_iqr_threshold
 
@@ -23,11 +23,11 @@ class DeepDriftMonitor:
         Args:
             model: PyTorch model to monitor
             layer_names: List of layer names to attach hooks to. If None, auto-detects.
-            layer_indices: Alternative to layer_names (not implemented yet)
-            pooling: Pooling strategy: 'cls', 'mean', 'flatten', or callable
-            n_channels: Number of channels for sparse sampling (None = use all)
-            seed: Random seed for reproducibility
-            device: Device to run calibration on
+            layer_indices: Not implemented (reserved for future use).
+            pooling: Pooling strategy: 'cls', 'mean', 'flatten', or callable.
+            n_channels: Number of channels for sparse sampling (None = use all).
+            seed: Random seed for reproducibility.
+            device: Device to run calibration on.
         """
         self.model = model
         self.device = device
@@ -36,7 +36,6 @@ class DeepDriftMonitor:
         self.n_channels = n_channels
         self.seed = seed
 
-        # Set seed for reproducible sparse sampling
         torch.manual_seed(seed)
         np.random.seed(seed)
 
@@ -67,7 +66,6 @@ class DeepDriftMonitor:
                 # Apply sparse sampling if requested
                 if self.n_channels is not None:
                     if name not in self.channel_indices:
-                        # Initialize random indices once
                         total_ch = pooled.shape[-1]
                         n = min(total_ch, self.n_channels)
                         self.channel_indices[name] = torch.randperm(total_ch, device=pooled.device)[:n]
@@ -80,51 +78,42 @@ class DeepDriftMonitor:
         if self.layer_names:
             self.hooks = register_hooks(self.model, self.layer_names, make_hook)
 
-def get_spatial_velocity(self) -> List[float]:
-    """
-    Returns L2-norms between successive layers for the current batch.
-    Handles layers with different dimensions by computing difference in a common space
-    or falling back to norm difference when shapes mismatch.
-    """
-    if len(self.activations) < 2:
-        return []
+    def get_spatial_velocity(self) -> List[float]:
+        """
+        Returns L2-norms between successive layers for the current batch.
+        Handles layers with different dimensions gracefully.
+        """
+        if len(self.activations) < 2:
+            return []
 
-    available_names = sorted(self.activations.keys())
-    acts = [self.activations[name] for name in available_names]
+        available_names = sorted(self.activations.keys())
+        acts = [self.activations[name] for name in available_names]
 
-    velocities = []
-    for i in range(len(acts) - 1):
-        a, b = acts[i], acts[i + 1]
-        
-        # Если размерности совпадают — считаем разность
-        if a.shape[-1] == b.shape[-1]:
-            diff = b - a
-            vel = torch.norm(diff, p=2, dim=-1).mean().item()
-        else:
-            # Разные размерности: считаем разницу норм (fallback)
-            # ||b|| - ||a|| (по модулю)
-            norm_a = torch.norm(a, p=2, dim=-1)
-            norm_b = torch.norm(b, p=2, dim=-1)
-            vel = torch.abs(norm_b - norm_a).mean().item()
-        
-        velocities.append(vel)
+        velocities = []
+        for i in range(len(acts) - 1):
+            a, b = acts[i], acts[i + 1]
 
-    return velocities
+            # If dimensions match → compute L2 difference
+            if a.shape[-1] == b.shape[-1]:
+                diff = b - a
+                vel = torch.norm(diff, p=2, dim=-1).mean().item()
+            else:
+                # Fallback: | ||b|| - ||a|| |
+                norm_a = torch.norm(a, p=2, dim=-1)
+                norm_b = torch.norm(b, p=2, dim=-1)
+                vel = torch.abs(norm_b - norm_a).mean().item()
+
+            velocities.append(vel)
+
+        return velocities
 
     def get_temporal_velocity(self, step: Optional[int] = None) -> float:
         """
         Returns L2-norm between current and previous state of the first monitored layer.
-        
-        Args:
-            step: Optional step number; if 0 or None resets state on first call
-            
-        Returns:
-            Velocity between current and previous state, or 0.0 if not enough states.
         """
         if not self.activations:
             return 0.0
 
-        # Use first available activation key, not self.layer_names[0]
         available_names = sorted(self.activations.keys())
         if not available_names:
             return 0.0
@@ -149,14 +138,6 @@ def get_spatial_velocity(self) -> List[float]:
     ) -> Dict[str, float]:
         """
         Calibrates the threshold on normal data.
-        
-        Args:
-            dataloader: DataLoader with in-distribution samples
-            method: Calibration method ('iqr' only currently)
-            device: Device to run on (overrides init device)
-            
-        Returns:
-            Dictionary with calibration statistics
         """
         target_device = device or self.device
         self.model.to(target_device)
@@ -166,7 +147,6 @@ def get_spatial_velocity(self) -> List[float]:
 
         with torch.no_grad():
             for batch in dataloader:
-                # Handle both tuple/list and direct tensor
                 if isinstance(batch, (list, tuple)):
                     x = batch[0].to(target_device)
                 else:
@@ -181,7 +161,7 @@ def get_spatial_velocity(self) -> List[float]:
             return {}
 
         all_velocities = np.array(all_velocities)
-        
+
         if method == "iqr":
             self.threshold = compute_iqr_threshold(all_velocities)
         else:
@@ -200,38 +180,28 @@ def get_spatial_velocity(self) -> List[float]:
         return self.calibration_stats
 
     def detect_anomaly(
-        self, 
-        x: torch.Tensor, 
+        self,
+        x: torch.Tensor,
         use_two_sided: bool = False,
         lower_factor: float = 1.5,
         upper_factor: float = 1.5
     ) -> Union[bool, Dict[str, Any]]:
         """
         Performs forward pass and checks for anomaly.
-        
-        Args:
-            x: Input tensor
-            use_two_sided: If True, check both low and high velocity anomalies
-            lower_factor: IQR multiplier for lower threshold (default: 1.5)
-            upper_factor: IQR multiplier for upper threshold (default: 1.5)
-            
-        Returns:
-            If use_two_sided is False: bool indicating anomaly
-            If use_two_sided is True: dict with 'is_anomaly', 'direction', 'peak_velocity'
         """
         if self.threshold is None:
             raise RuntimeError("Must call calibrate() before detect_anomaly()")
 
         self.model.eval()
         self.clear()
-        
+
         with torch.no_grad():
             self.model(x)
 
         velocities = self.get_spatial_velocity()
         if not velocities:
             return False if not use_two_sided else {
-                'is_anomaly': False, 
+                'is_anomaly': False,
                 'direction': 'none',
                 'peak_velocity': 0.0,
                 'lower_threshold': None,
@@ -249,7 +219,6 @@ def get_spatial_velocity(self) -> List[float]:
 
         is_low = peak_v < lower_threshold
         is_high = peak_v > upper_threshold
-
         direction = 'low' if is_low else 'high' if is_high else 'normal'
 
         return {
@@ -259,6 +228,34 @@ def get_spatial_velocity(self) -> List[float]:
             'lower_threshold': lower_threshold,
             'upper_threshold': upper_threshold
         }
+
+    def get_layer_velocities(self) -> Dict[str, float]:
+        """
+        Returns velocity per layer pair for interpretability.
+        """
+        if len(self.activations) < 2:
+            return {}
+
+        available_names = sorted(self.activations.keys())
+        velocities = {}
+
+        for i in range(len(available_names) - 1):
+            name1 = available_names[i]
+            name2 = available_names[i + 1]
+            a = self.activations[name1]
+            b = self.activations[name2]
+
+            if a.shape[-1] == b.shape[-1]:
+                diff = b - a
+                vel = torch.norm(diff, p=2, dim=-1).mean().item()
+            else:
+                norm_a = torch.norm(a, p=2, dim=-1)
+                norm_b = torch.norm(b, p=2, dim=-1)
+                vel = torch.abs(norm_b - norm_a).mean().item()
+
+            velocities[f"{name1}→{name2}"] = vel
+
+        return velocities
 
     def clear(self):
         """Reset stored activations and temporal state."""
@@ -270,28 +267,6 @@ def get_spatial_velocity(self) -> List[float]:
         for hook in self.hooks:
             hook.remove()
         self.hooks = []
-
-    def get_layer_velocities(self) -> Dict[str, float]:
-        """
-        Returns velocity per layer pair for interpretability.
-        
-        Returns:
-            Dictionary mapping layer pairs to velocities
-        """
-        if len(self.activations) < 2:
-            return {}
-
-        available_names = sorted(self.activations.keys())
-        velocities = {}
-        
-        for i in range(len(available_names) - 1):
-            name1 = available_names[i]
-            name2 = available_names[i + 1]
-            diff = self.activations[name2] - self.activations[name1]
-            vel = torch.norm(diff, p=2, dim=-1).mean().item()
-            velocities[f"{name1}→{name2}"] = vel
-
-        return velocities
 
     def reset_temporal(self):
         """Reset temporal velocity state."""
