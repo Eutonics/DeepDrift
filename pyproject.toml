@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "deepdrift"
-version = "1.1.0"
+version = "1.1.2"
 authors = [
-  { name="K-Dense Web", email="contact@k-dense.ai" },
+  { name="Alexey Evtushenko", email="alexey@eutonics.ru" },
 ]
 description = "Zero-Training Hidden-State Monitoring for Robustness in Vision, Language, and Generative Models"
 readme = "README.md"
