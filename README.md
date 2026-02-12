@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/deepdrift)](https://pypi.org/project/deepdrift/)
 [![Python](https://img.shields.io/pypi/pyversions/deepdrift)](https://pypi.org/project/deepdrift/)
 [![License](https://img.shields.io/github/license/Eutonics/DeepDrift)](LICENSE)
-[![Paper](https://img.shields.io/badge/paper-Zenodo-blue)](https://zenodo.org/...)
+[![Paper](https://img.shields.io/badge/paper-Zenodo-blue)](https://zenodo.org/records/18622319)
 
 **DeepDrift** is a runtime neural network monitoring library based on
 analyzing the rate of change of hidden states (*Semantic Velocity*). It
