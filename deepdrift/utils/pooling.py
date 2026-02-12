@@ -8,11 +8,19 @@ import torch.nn as nn
 from typing import Optional, Callable, Union
 
 def cls_pool(x: torch.Tensor) -> torch.Tensor:
-    """Extract CLS token from ViT-like output [B, Seq, Dim] -> [B, Dim]"""
-    if x.dim() != 3:
-        # Fallback for non-transformer outputs
-        return x.mean(dim=1) if x.dim() > 1 else x
-    return x[:, 0, :]
+    """
+    Extract CLS token from ViT-like output [B, Seq, Dim] -> [B, Dim].
+    For 2D input [B, Dim] — return as is.
+    For other shapes — fallback to mean pooling.
+    """
+    if x.dim() == 3:
+        return x[:, 0, :]
+    elif x.dim() == 2:
+        # Already [B, Dim] — just return
+        return x
+    else:
+        # Fallback: mean over remaining dimensions
+        return x.mean(dim=tuple(range(1, x.dim())))
 
 def mean_pool(x: torch.Tensor) -> torch.Tensor:
     """Global Average Pooling or Mean pooling across sequence/spatial dimensions"""
@@ -20,8 +28,10 @@ def mean_pool(x: torch.Tensor) -> torch.Tensor:
         return x.mean(dim=[2, 3])
     elif x.dim() == 3:    # Sequence: [B, Seq, Dim]
         return x.mean(dim=1)
-    else:                 # [B, Dim] or others
-        return x if x.dim() == 2 else x.flatten(1)
+    elif x.dim() == 2:    # [B, Dim]
+        return x
+    else:                 # Other
+        return x.flatten(1)
 
 def flatten_pool(x: torch.Tensor) -> torch.Tensor:
     """Flatten all but batch dimension"""
