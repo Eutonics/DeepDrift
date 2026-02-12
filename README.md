@@ -159,5 +159,3 @@ bash scripts/reproduce_all.sh
 MIT
 
 ------------------------------------------------------------------------
-
-Generated using K-Dense Web (https://k-dense.ai)
