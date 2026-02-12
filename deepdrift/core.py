@@ -80,30 +80,36 @@ class DeepDriftMonitor:
         if self.layer_names:
             self.hooks = register_hooks(self.model, self.layer_names, make_hook)
 
-    def get_spatial_velocity(self) -> List[float]:
-        """
-        Returns L2-norms between successive layers for the current batch.
-        Uses the actual keys present in activations, sorted for consistent order.
+def get_spatial_velocity(self) -> List[float]:
+    """
+    Returns L2-norms between successive layers for the current batch.
+    Handles layers with different dimensions by computing difference in a common space
+    or falling back to norm difference when shapes mismatch.
+    """
+    if len(self.activations) < 2:
+        return []
+
+    available_names = sorted(self.activations.keys())
+    acts = [self.activations[name] for name in available_names]
+
+    velocities = []
+    for i in range(len(acts) - 1):
+        a, b = acts[i], acts[i + 1]
         
-        Returns:
-            List of velocities between consecutive layers, empty if <2 layers available.
-        """
-        if len(self.activations) < 2:
-            return []
-
-        # Use ACTUAL keys from hooks, not self.layer_names
-        # Sort to maintain consistent order (works for encoder.layers.0, encoder.layers.1, etc.)
-        available_names = sorted(self.activations.keys())
-        acts = [self.activations[name] for name in available_names]
-
-        velocities = []
-        for i in range(len(acts) - 1):
-            diff = acts[i + 1] - acts[i]
-            # L2 norm across feature dimension, then mean over batch
+        # Если размерности совпадают — считаем разность
+        if a.shape[-1] == b.shape[-1]:
+            diff = b - a
             vel = torch.norm(diff, p=2, dim=-1).mean().item()
-            velocities.append(vel)
+        else:
+            # Разные размерности: считаем разницу норм (fallback)
+            # ||b|| - ||a|| (по модулю)
+            norm_a = torch.norm(a, p=2, dim=-1)
+            norm_b = torch.norm(b, p=2, dim=-1)
+            vel = torch.abs(norm_b - norm_a).mean().item()
+        
+        velocities.append(vel)
 
-        return velocities
+    return velocities
 
     def get_temporal_velocity(self, step: Optional[int] = None) -> float:
         """
