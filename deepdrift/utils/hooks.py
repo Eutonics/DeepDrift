@@ -4,17 +4,16 @@ from typing import List, Optional
 def find_target_layers(model: nn.Module, architecture: Optional[str] = None) -> List[str]:
     """
     Heuristic to find suitable layers for monitoring.
-    - For ViT: returns names of encoder layers.
-    - For CNN: returns names of last convolutional blocks.
-    - Default: returns names of blocks that look like feature extractors.
+    - For ViT: returns all encoder layers.
+    - For CNN/MLP: returns a few layers from the second half.
     """
     layer_names = []
 
-    # ViT Heuristic
+    # ViT
     if hasattr(model, 'encoder') and hasattr(model.encoder, 'layers'):
         return [f'encoder.layers.{i}' for i in range(len(model.encoder.layers))]
 
-    # General CNN/MLP Heuristic
+    # CNN / MLP
     candidates = []
     for name, module in model.named_modules():
         if isinstance(module, (nn.Conv2d, nn.Linear, nn.TransformerEncoderLayer)):
@@ -23,13 +22,11 @@ def find_target_layers(model: nn.Module, architecture: Optional[str] = None) -> 
     if not candidates:
         return []
 
-    # Take a few layers from the second half of the network (semantic region)
     if len(candidates) > 5:
         start = int(len(candidates) * 0.6)
         end = len(candidates)
-        # Select up to 4 layers
-        idx = [int(i) for i in iter(range(start, end, max(1, (end - start) // 4)))]
-        layer_names = [candidates[i] for i in idx[:4]]
+        indices = [int(i) for i in iter(range(start, end, max(1, (end - start) // 4)))]
+        layer_names = [candidates[i] for i in indices[:4]]
     else:
         layer_names = candidates
 
