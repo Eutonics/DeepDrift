@@ -1,130 +1,101 @@
-#!/usr/bin/env python3
-"""
-DeepDrift RL CartPole Experiment (Gymnasium API)
-Supports --quick mode for smoke testing.
-"""
+# ==============================================================================
+# DEEPDRIFT RL: SPATIAL FRICTION VS ACTION ENTROPY
+# ==============================================================================
 
-import argparse
 import torch
-import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
-
-try:
-    import gymnasium as gym
-    from stable_baselines3 import PPO, DQN
-    RL_AVAILABLE = True
-except ImportError:
-    RL_AVAILABLE = False
-
+import matplotlib.pyplot as plt
+import gymnasium as gym
+from stable_baselines3 import PPO
 from deepdrift import DeepDriftMonitor
+from tqdm import tqdm
+from sklearn.metrics import roc_auc_score
 
-def run_quick():
-    """Smoke test: synthetic MLP, no environment."""
-    print("[!] Quick mode: Using synthetic MLP.")
-    
-    model = nn.Sequential(
-        nn.Linear(4, 64),
-        nn.ReLU(),
-        nn.Linear(64, 32),
-        nn.ReLU(),
-        nn.Linear(32, 2)
-    )
-    
-    monitor = DeepDriftMonitor(
-        model,
-        layer_names=None,
-        pooling='flatten',
-        debug=False
-    )
-    
-    x = torch.randn(16, 4)
-    _ = model(x)
-    
-    vel = monitor.get_spatial_velocity()
-    print(f"  Spatial velocity: {[round(v, 4) for v in vel]}")
-    
-    v1 = monitor.get_temporal_velocity()
-    _ = model(torch.randn(16, 4))
-    v2 = monitor.get_temporal_velocity()
-    print(f"  Temporal velocity: first={v1:.4f}, second={v2:.4f}")
-    
-    print("[✓] Quick test passed")
-    return 0
+# 1. CONFIG
+class Config:
+    ENV_ID = "CartPole-v1"
+    TIMESTEPS = 15000
+    N_EPISODES = 50
+    # Stronger stress to provoke internal friction
+    SENSOR_NOISE = 0.5
+    SENSOR_SCALE = 1.8 
 
-def run_full(args):
-    """Full experiment (CartPole training + evaluation)."""
-    if not RL_AVAILABLE:
-        print("[!] Install gymnasium and stable-baselines3 for full mode")
-        return 1
+# 2. TRAINING
+print("🔄 Training PPO agent...")
+env = gym.make(Config.ENV_ID)
+model = PPO("MlpPolicy", env, verbose=0)
+model.learn(total_timesteps=Config.TIMESTEPS)
+
+# 3. MONITORING SPATIAL FRICTION
+# We monitor all layers of the policy network to catch "Information Friction"
+# In SB3, layers are policy_net[0], policy_net[2], etc.
+target = model.policy.mlp_extractor.policy_net
+monitor = DeepDriftMonitor(target, layer_names=None, pooling='flatten')
+
+# 4. ENGINE
+def run_eval(env, model, monitor, is_stress=False):
+    res = {'frictions': [], 'entropies': [], 'rewards': []}
     
-    print(f"[*] Running CartPole experiment with {args.algo.upper()}, timesteps={args.timesteps}")
-    
-    # Environment
-    env = gym.make("CartPole-v1", render_mode=None)
-    env.reset(seed=args.seed)
-    
-    # Agent
-    if args.algo == "ppo":
-        model = PPO("MlpPolicy", env, verbose=0, seed=args.seed)
-    else:
-        model = DQN("MlpPolicy", env, verbose=0, seed=args.seed)
-    
-    model.learn(total_timesteps=args.timesteps)
-    
-    # Monitor
-    monitor = DeepDriftMonitor(
-        model.policy,
-        layer_names=None,
-        pooling='flatten'
-    )
-    
-    # Evaluate
-    velocities = []
-    rewards = []
-    
-    for ep in range(args.n_episodes):
-        obs, info = env.reset(seed=args.seed + ep)
-        ep_vel = []
-        ep_rew = 0
-        terminated = False
-        truncated = False
+    for _ in tqdm(range(Config.N_EPISODES), desc="Testing"):
+        obs, _ = env.reset()
+        done = False
+        frics, ents, total_rew = [], [], 0
         
-        while not (terminated or truncated):
-            obs_t = torch.as_tensor(obs).float().unsqueeze(0)
-            _ = model.policy(obs_t)
-            vel = monitor.get_temporal_velocity()
-            ep_vel.append(vel)
+        while not done:
+            if is_stress:
+                obs = obs * Config.SENSOR_SCALE + np.random.normal(0, Config.SENSOR_NOISE, size=obs.shape)
+            
+            obs_t = torch.as_tensor(obs).float().unsqueeze(0).to(model.device)
+            
+            # --- DEEPDRIFT: SPATIAL VELOCITY (FRICTION) ---
+            monitor.clear()
+            _ = model.policy.mlp_extractor(obs_t)
+            # We sum velocities between ALL internal layers
+            v = monitor.get_spatial_velocity()
+            frics.append(np.sum(v)) 
+            
+            # --- SOTA: ENTROPY ---
+            dist = model.policy.get_distribution(obs_t)
+            ents.append(dist.entropy().item())
             
             action, _ = model.predict(obs, deterministic=True)
             obs, reward, terminated, truncated, _ = env.step(action)
-            ep_rew += reward
+            total_rew += reward
+            done = terminated or truncated
+            
+        res['rewards'].append(total_rew)
+        res['frictions'].append(np.mean(frics))
+        res['entropies'].append(np.mean(ents))
         
-        velocities.append(np.mean(ep_vel))
-        rewards.append(ep_rew)
-    
-    # Summary
-    success_rate = np.mean([1 if r >= 195 else 0 for r in rewards]) * 100
-    print(f"[*] Success rate: {success_rate:.1f}%")
-    print(f"[*] Mean reward: {np.mean(rewards):.2f} ± {np.std(rewards):.2f}")
-    print(f"[*] Mean velocity: {np.mean(velocities):.4f} ± {np.std(velocities):.4f}")
-    
-    if len(velocities) > 1:
-        corr = np.corrcoef(velocities, rewards)[0,1]
-        print(f"[*] Correlation reward-velocity: {corr:.3f}")
-    
-    env.close()
-    return 0
+    return {k: np.array(v) for k, v in res.items()}
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--quick", action="store_true", help="Run quick smoke test")
-    parser.add_argument("--algo", type=str, choices=["ppo", "dqn"], default="ppo")
-    parser.add_argument("--timesteps", type=int, default=10000)
-    parser.add_argument("--n_episodes", type=int, default=50)
-    parser.add_argument("--seed", type=int, default=42)
-    args = parser.parse_args()
-    
-    if args.quick:
-        exit(run_quick())
-    else:
-        exit(run_full(args))
+# 5. EXECUTION
+res_id = run_eval(env, model, monitor, is_stress=False)
+res_ood = run_eval(env, model, monitor, is_stress=True)
+
+# 6. ANALYSIS
+y_true = np.concatenate([np.zeros(Config.N_EPISODES), np.ones(Config.N_EPISODES)])
+def get_auroc(id_v, ood_v):
+    scores = np.concatenate([id_v, ood_v])
+    score = roc_auc_score(y_true, scores)
+    return max(score, 1 - score)
+
+auroc_dd = get_auroc(res_id['frictions'], res_ood['frictions'])
+auroc_sota = get_auroc(res_id['entropies'], res_ood['entropies'])
+
+# 7. PLOT
+plt.figure(figsize=(15, 5))
+plt.subplot(1, 2, 1)
+plt.hist(res_id['frictions'], bins=15, alpha=0.5, label='Clean', color='blue')
+plt.hist(res_ood['frictions'], bins=15, alpha=0.5, label='Stress (OOD)', color='red')
+plt.title("Information Friction Distribution"); plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.bar(['Entropy (SOTA)', 'DeepDrift (Friction)'], [auroc_sota, auroc_dd], color=['gray', 'orange'])
+plt.ylim(0.4, 1.05); plt.title("Detection Accuracy (AUROC)")
+for i, v in enumerate([auroc_sota, auroc_dd]): plt.text(i, v+0.01, f'{v:.4f}', ha='center')
+plt.show()
+
+print(f"Final AUROC - DeepDrift: {auroc_dd:.4f} | Entropy: {auroc_sota:.4f}")
+monitor.remove_hooks()
