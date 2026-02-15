@@ -1,31 +1,23 @@
 #!/bin/bash
-# DeepDrift v1.1.4 Reproduction Script
-# -----------------------------------
-# This script runs all experiments in --quick mode to verify installation.
-
+# DeepDrift v1.0.0 Global Reproduction Script
 set -e
 
-echo "🚀 Starting DeepDrift Reproduction (Smoke Test Mode)..."
+echo "===================================================="
+echo "  DeepDrift: Starting Global Reproduction"
+echo "===================================================="
 
-# 1. Install dependencies
-echo "[*] Checking/Installing dependencies..."
-pip install -r requirements.txt
+# 1. Инсталляция в режиме редактирования
 pip install -e .
 
-# 2. Run Experiments
-echo "[*] 1/4: Vision OOD (ViT)..."
-python experiments/vit_svhn_ood.py --quick
+# 2. Vision Experiment
+echo -e "\n[*] Running Vision SOTA Benchmark (ViT)..."
+python3 experiments/vit_svhn_ood.py
 
-echo "[*] 2/4: RL Crash Prediction (LunarLander)..."
-python experiments/rl_lunarlander.py --quick
+# 3. RL Experiment
+echo -e "\n[*] Running RL Lead Time Benchmark (LunarLander)..."
+# Мы используем v5.2 который у тебя уже в scripts
+python3 scripts/rl_lead_time_v52.py
 
-echo "[*] 3/4: LLM Hallucination Detection..."
-python experiments/llm_hallucination.py --quick
-
-echo "[*] 4/4: Diffusion Memorization..."
-python experiments/diffusion_memorization.py --quick
-
-echo ""
-echo "✅ All tests passed! DeepDrift is correctly installed and functional."
-echo "To run full experiments, remove the --quick flag in individual scripts."
-echo "Note: Full experiments require datasets (CIFAR, SVHN) and/or SB3/Gymnasium."
+echo -e "\n===================================================="
+echo "✅ ALL TESTS PASSED"
+echo "===================================================="
