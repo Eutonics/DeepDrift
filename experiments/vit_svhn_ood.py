@@ -3,6 +3,7 @@
 # ==============================================================================
 
 import torch
+import os
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
@@ -34,9 +35,12 @@ transform = transforms.Compose([
     transforms.Resize(256), transforms.CenterCrop(Config.IMG_SIZE),
     transforms.ToTensor(), transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
+
 if not os.path.exists('imagenette2-160'):
-    !wget -q https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-160.tgz
-    !tar -xzf imagenette2-160.tgz
+    print("🔄 Downloading Imagenette dataset...")
+    os.system('wget -q https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-160.tgz')
+    os.system('tar -xzf imagenette2-160.tgz')
+
 dataset = datasets.ImageFolder(root='imagenette2-160/val', transform=transform)
 loader = DataLoader(dataset, batch_size=Config.BATCH_SIZE, shuffle=True)
 
