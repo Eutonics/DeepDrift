@@ -16,7 +16,7 @@ python3 experiments/vit_svhn_ood.py
 # 3. RL Experiment
 echo -e "\n[*] Running RL Lead Time Benchmark (LunarLander)..."
 # Мы используем v5.2 который у тебя уже в scripts
-python3 scripts/rl_lead_time_v52.py
+python3 experiments/rl_lunarlander.py
 
 echo -e "\n===================================================="
 echo "✅ ALL TESTS PASSED"
