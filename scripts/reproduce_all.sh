@@ -1,5 +1,5 @@
 #!/bin/bash
-# DeepDrift v1.1.0 Reproduction Script
+# DeepDrift v1.1.4 Reproduction Script
 # -----------------------------------
 # This script runs all experiments in --quick mode to verify installation.
 
