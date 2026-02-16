@@ -221,7 +221,7 @@ class DeepDriftMonitor:
         
         return velocity
 
-    def calibrate(
+        def calibrate(
         self,
         dataloader: Any,
         method: str = "iqr",
@@ -235,7 +235,73 @@ class DeepDriftMonitor:
         self.model.eval()
 
         all_velocities = []
-@@ -261,69 +305,108 @@ class DeepDriftMonitor:
+
+        with torch.no_grad():
+            for batch in dataloader:
+                if isinstance(batch, (list, tuple)):
+                    x = batch[0].to(target_device)
+                else:
+                    x = batch.to(target_device)
+
+                self.model(x)
+                spatial_v = self.get_spatial_velocity()
+                if spatial_v:
+                    all_velocities.append(max(spatial_v))
+
+        if not all_velocities:
+            return {}
+
+        all_velocities = np.array(all_velocities)
+
+        if method == "iqr":
+            self.threshold = compute_iqr_threshold(all_velocities)
+        else:
+            raise ValueError(f"Unknown calibration method: {method}")
+
+        self.calibration_stats = {
+            "mean": float(np.mean(all_velocities)),
+            "std": float(np.std(all_velocities)),
+            "q25": float(np.percentile(all_velocities, 25)),
+            "q75": float(np.percentile(all_velocities, 75)),
+            "iqr": float(np.percentile(all_velocities, 75) - np.percentile(all_velocities, 25)),
+            "threshold": self.threshold,
+            "n_samples": len(all_velocities)
+        }
+
+        return self.calibration_stats
+
+    def detect_anomaly(
+        self,
+        x: torch.Tensor,
+        use_two_sided: bool = False,
+        lower_factor: float = 1.5,
+        upper_factor: float = 1.5
+    ) -> Union[bool, Dict[str, Any]]:
+        """
+        Performs forward pass and checks for anomaly.
+        """
+        if self.threshold is None:
+            raise RuntimeError("Must call calibrate() before detect_anomaly()")
+
+        self.model.eval()
+        self.clear()
+
+        with torch.no_grad():
+            self.model(x)
+
+        velocities = self.get_spatial_velocity()
+        if not velocities:
+            return False if not use_two_sided else {
+                'is_anomaly': False,
+                'direction': 'none',
+                'peak_velocity': 0.0,
+                'lower_threshold': None,
+                'upper_threshold': None
+            }
+
+        peak_v = max(velocities)
+
+        if not use_two_sided:
             return peak_v > self.threshold
 
         # Two-sided detection
@@ -321,10 +387,6 @@ class DeepDriftMonitor:
     def get_drift_score(self, aggregate: bool = True) -> Union[torch.Tensor, float]:
         """
         Main drift metric based on velocity profile.
-
-        Args:
-            aggregate: If True, returns mean batch score as float.
-                       If False, returns full [batch, transitions] tensor.
         """
         vel_profile = self.compute_velocity()
         if not aggregate:
@@ -344,3 +406,4 @@ class DeepDriftMonitor:
         self.prev_state = None
         if self.debug:
             print("[DeepDrift] Reset temporal state")
+
