@@ -37,6 +37,33 @@ def flatten_pool(x: torch.Tensor) -> torch.Tensor:
     """Flatten all but batch dimension"""
     return x.flatten(1)
 
+
+def last_token_pool(x: torch.Tensor) -> torch.Tensor:
+    """Use the last sequence token when available, otherwise fallback safely."""
+    if x.dim() >= 3:
+        return x[:, -1, :]
+    if x.dim() == 2:
+        return x
+    return x.flatten(1)
+
+
+def auto_pool(x: torch.Tensor) -> torch.Tensor:
+    """
+    Adaptive pooling for architecture-agnostic monitoring.
+
+    - [B, C, H, W] -> global average pooling over H,W
+    - [B, T, D] -> CLS token (first token)
+    - [B, D] -> as is
+    - other -> flatten from dim 1
+    """
+    if x.dim() == 4:
+        return x.mean(dim=[2, 3])
+    if x.dim() == 3:
+        return x[:, 0, :]
+    if x.dim() == 2:
+        return x
+    return x.flatten(1)
+
 def sparse_sample(x: torch.Tensor, n_channels: int, indices: Optional[torch.Tensor] = None) -> torch.Tensor:
     """
     Select N random channels from the last dimension.
@@ -69,8 +96,8 @@ def get_pooling_fn(pooling: Union[str, Callable]) -> Callable:
     Resolve pooling function by name or return callable.
     
     Args:
-        pooling: 'cls', 'mean', 'flatten', or a custom callable
-    
+        pooling: 'auto', 'cls', 'mean', 'flatten', 'last_token', or a custom callable
+        
     Returns:
         Pooling function
     """
@@ -78,12 +105,17 @@ def get_pooling_fn(pooling: Union[str, Callable]) -> Callable:
         return pooling
 
     mapping = {
+        "auto": auto_pool,
         "cls": cls_pool,
         "mean": mean_pool,
-        "flatten": flatten_pool
+        "flatten": flatten_pool,
+        "last_token": last_token_pool,
     }
 
     if pooling not in mapping:
-        raise ValueError(f"Unknown pooling method: {pooling}. Use 'cls', 'mean', 'flatten' or a callable.")
+        raise ValueError(
+            f"Unknown pooling method: {pooling}. "
+            "Use 'auto', 'cls', 'mean', 'flatten', 'last_token' or a callable."
+        )
 
     return mapping[pooling]
