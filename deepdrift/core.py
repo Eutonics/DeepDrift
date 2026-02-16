@@ -6,6 +6,7 @@ from .utils.pooling import get_pooling_fn
 from .utils.hooks import register_hooks, find_target_layers
 from .utils.stats import compute_iqr_threshold
 
+
 class DeepDriftMonitor:
     def __init__(
         self,
@@ -22,7 +23,7 @@ class DeepDriftMonitor:
     ):
         """
         Unified monitor for Semantic Velocity.
-        
+
         Args:
             model: PyTorch model to monitor
             layer_names: List of layer names to attach hooks to. If None, auto-detects.
@@ -48,7 +49,6 @@ class DeepDriftMonitor:
         torch.manual_seed(seed)
         np.random.seed(seed)
 
-        # Auto-detect layers if none provided
         if layer_names is None:
             layer_names = find_target_layers(model)
         self.layer_names = layer_names if layer_names else []
@@ -125,23 +125,20 @@ class DeepDriftMonitor:
         def make_hook(name):
             def hook(module, input, output):
                 output_tensor = self._normalize_output(output)
-                # Apply pooling
                 try:
                     pooled = self.pooling_fn(output_tensor)
                 except Exception as e:
                     raise RuntimeError(f"Pooling failed for layer {name}: {e}")
 
-                # Apply sparse sampling if requested
                 if self.n_channels is not None:
                     if name not in self.channel_indices:
                         total_ch = pooled.shape[-1]
                         n = min(total_ch, self.n_channels)
                         self.channel_indices[name] = torch.randperm(total_ch, device=pooled.device)[:n]
-
                     pooled = pooled[..., self.channel_indices[name]]
 
                 self.activations[name] = pooled.detach()
-                
+
                 if self.debug:
                     print(f"[DeepDrift] Hook {name}: pooled shape {pooled.shape}")
             return hook
@@ -151,6 +148,7 @@ class DeepDriftMonitor:
             missing_layers = [name for name in self.layer_names if name not in modules]
             if missing_layers:
                 raise ValueError(f"Layer(s) not found in model: {missing_layers}")
+
             self.hooks = register_hooks(self.model, self.layer_names, make_hook)
             if self.debug:
                 print(f"[DeepDrift] Registered hooks on: {self.layer_names}")
@@ -180,8 +178,8 @@ class DeepDriftMonitor:
             name_b = available_names[i + 1]
 
             vel, method = self._pair_velocity(a, b)
-
             velocities.append(vel)
+
             if self.debug:
                 print(f"  {name_a} → {name_b}: vel={vel:.6f} ({method})")
 
@@ -204,32 +202,28 @@ class DeepDriftMonitor:
         current_state = self.activations[current_layer_name]
 
         if self.prev_state is None or step == 0:
-            self.prev_state = current_state.clone()  # clone to avoid in-place modification
+            self.prev_state = current_state.clone()
             if self.debug:
                 print(f"[DeepDrift] Temporal: initialized prev_state from {current_layer_name}, shape {current_state.shape}")
             return 0.0
 
         velocity, _ = self._pair_velocity(self.prev_state, current_state)
-        
-        # Update previous state for next call
         self.prev_state = current_state.clone()
-        
+
         if self.debug:
             print(f"[DeepDrift] Temporal velocity: {velocity:.6f}")
             if velocity == 0.0:
-                print(f"[DeepDrift] WARNING: velocity is zero. prev and current may be identical.")
-        
+                print("[DeepDrift] WARNING: velocity is zero. prev and current may be identical.")
+
         return velocity
 
-        def calibrate(
+    def calibrate(
         self,
         dataloader: Any,
         method: str = "iqr",
         device: Optional[str] = None
     ) -> Dict[str, float]:
-        """
-        Calibrates the threshold on normal data.
-        """
+        """Calibrates the threshold on normal data."""
         target_device = device or self.device
         self.model.to(target_device)
         self.model.eval()
@@ -265,7 +259,7 @@ class DeepDriftMonitor:
             "q75": float(np.percentile(all_velocities, 75)),
             "iqr": float(np.percentile(all_velocities, 75) - np.percentile(all_velocities, 25)),
             "threshold": self.threshold,
-            "n_samples": len(all_velocities)
+            "n_samples": len(all_velocities),
         }
 
         return self.calibration_stats
@@ -277,9 +271,7 @@ class DeepDriftMonitor:
         lower_factor: float = 1.5,
         upper_factor: float = 1.5
     ) -> Union[bool, Dict[str, Any]]:
-        """
-        Performs forward pass and checks for anomaly.
-        """
+        """Performs forward pass and checks for anomaly."""
         if self.threshold is None:
             raise RuntimeError("Must call calibrate() before detect_anomaly()")
 
@@ -292,11 +284,11 @@ class DeepDriftMonitor:
         velocities = self.get_spatial_velocity()
         if not velocities:
             return False if not use_two_sided else {
-                'is_anomaly': False,
-                'direction': 'none',
-                'peak_velocity': 0.0,
-                'lower_threshold': None,
-                'upper_threshold': None
+                "is_anomaly": False,
+                "direction": "none",
+                "peak_velocity": 0.0,
+                "lower_threshold": None,
+                "upper_threshold": None,
             }
 
         peak_v = max(velocities)
@@ -304,26 +296,23 @@ class DeepDriftMonitor:
         if not use_two_sided:
             return peak_v > self.threshold
 
-        # Two-sided detection
-        lower_threshold = self.calibration_stats['q25'] - lower_factor * self.calibration_stats['iqr']
-        upper_threshold = self.calibration_stats['q75'] + upper_factor * self.calibration_stats['iqr']
+        lower_threshold = self.calibration_stats["q25"] - lower_factor * self.calibration_stats["iqr"]
+        upper_threshold = self.calibration_stats["q75"] + upper_factor * self.calibration_stats["iqr"]
 
         is_low = peak_v < lower_threshold
         is_high = peak_v > upper_threshold
-        direction = 'low' if is_low else 'high' if is_high else 'normal'
+        direction = "low" if is_low else "high" if is_high else "normal"
 
         return {
-            'is_anomaly': is_low or is_high,
-            'direction': direction,
-            'peak_velocity': peak_v,
-            'lower_threshold': lower_threshold,
-            'upper_threshold': upper_threshold
+            "is_anomaly": is_low or is_high,
+            "direction": direction,
+            "peak_velocity": peak_v,
+            "lower_threshold": lower_threshold,
+            "upper_threshold": upper_threshold,
         }
 
     def get_layer_velocities(self) -> Dict[str, float]:
-        """
-        Returns velocity per layer pair for interpretability.
-        """
+        """Returns velocity per layer pair for interpretability."""
         if len(self.activations) < 2:
             return {}
 
@@ -337,7 +326,6 @@ class DeepDriftMonitor:
             b = self.activations[name2]
 
             vel, _ = self._pair_velocity(a, b)
-
             velocities[f"{name1}→{name2}"] = vel
 
         return velocities
@@ -350,9 +338,7 @@ class DeepDriftMonitor:
             print("[DeepDrift] Cleared activations and temporal state")
 
     def compute_velocity(self) -> torch.Tensor:
-        """
-        Returns a batch-wise velocity profile with shape [batch, transitions].
-        """
+        """Returns a batch-wise velocity profile with shape [batch, transitions]."""
         ordered_names = self._ordered_activation_names()
         ordered_acts = [self.activations[name] for name in ordered_names]
 
@@ -387,6 +373,10 @@ class DeepDriftMonitor:
     def get_drift_score(self, aggregate: bool = True) -> Union[torch.Tensor, float]:
         """
         Main drift metric based on velocity profile.
+
+        Args:
+            aggregate: If True, returns mean batch score as float.
+                       If False, returns full [batch, transitions] tensor.
         """
         vel_profile = self.compute_velocity()
         if not aggregate:
@@ -406,4 +396,3 @@ class DeepDriftMonitor:
         self.prev_state = None
         if self.debug:
             print("[DeepDrift] Reset temporal state")
-
